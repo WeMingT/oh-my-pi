@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The `xai` web-search provider now uses `grok-4.6` (same list price, roughly a third of the server-side tool calls per query) and its model is configurable via `providers.webSearchXaiModel` / `XAI_SEARCH_MODEL`.
+
+### Added
+
+- Registry-less callers of the `xai` web-search provider (e.g. SDK custom-tool embedding without a model registry) now honor `XAI_BASE_URL` instead of hardcoding the official endpoint, matching the registry path.
+
 ### Fixed
 
 - GitHub Copilot model-policy 403s (plan, model policy, org restriction) no longer delete stored credentials, so the provider stays listed in `/model` after a per-model access denial instead of disappearing until the next `/login` ([#11280](https://github.com/can1357/oh-my-pi/pull/11280) by [@H4vC](https://github.com/H4vC)).

@@ -10,7 +10,22 @@ import { SearchProvider } from "./base";
 import { classifyProviderHttpError, withHardTimeout } from "./utils";
 
 const XAI_DEFAULT_BASE_URL = "https://api.x.ai/v1";
-const XAI_WEB_SEARCH_MODEL = "grok-4.5";
+const XAI_WEB_SEARCH_MODEL = "grok-4.6";
+
+/**
+ * Resolve the model id for an xAI web-search call. `XAI_SEARCH_MODEL` wins as
+ * a per-machine override (mirrors `GEMINI_SEARCH_MODEL` on the Gemini
+ * provider), then the orchestrator-passed setting, then the default.
+ * grok-4.5 and grok-4.6 share list pricing, but grok-4.6 settles the same
+ * query in roughly a third of the server-side tool calls, so it is both
+ * faster and cheaper as the default.
+ */
+function resolveXAIWebSearchModel(configuredModel: string | undefined): string {
+	const envModel = $env.XAI_SEARCH_MODEL?.trim();
+	if (envModel) return envModel;
+	const model = configuredModel?.trim();
+	return model || XAI_WEB_SEARCH_MODEL;
+}
 // grok-4.5 defaults reasoning.effort to "high"; xAI documents "low" for
 // latency-sensitive agentic use and simple tool calling
 // (docs.x.ai/developers/model-capabilities/text/reasoning). Web search is
@@ -119,7 +134,7 @@ function buildRequestBody(params: SearchParams): Record<string, unknown> {
 	}
 
 	const body: Record<string, unknown> = {
-		model: XAI_WEB_SEARCH_MODEL,
+		model: resolveXAIWebSearchModel(params.xaiModel),
 		input: [
 			{ role: "system", content: params.systemPrompt },
 			{ role: "user", content: query },
@@ -397,9 +412,13 @@ function resolveXAIWebSearchAuth(params: SearchParams): XAIWebSearchAuth {
 /** Execute xAI Responses API web search. */
 export async function searchXAI(params: SearchParams): Promise<SearchResponse> {
 	const auth = resolveXAIWebSearchAuth(params);
-	const transport = params.modelRegistry
-		? resolveXAIHttpTransport(params.modelRegistry, auth.provider, XAI_WEB_SEARCH_MODEL)
-		: { baseURL: XAI_DEFAULT_BASE_URL };
+	const modelId = resolveXAIWebSearchModel(params.xaiModel);
+	const transport: XAIHttpTransport = params.modelRegistry
+		? resolveXAIHttpTransport(params.modelRegistry, auth.provider, modelId)
+		: // No registry (SDK custom-tool callers that embed web_search without
+			// one, direct searchXAI callers): honor XAI_BASE_URL like the
+			// registry path does, instead of hardcoding the official endpoint.
+			{ baseURL: ($env.XAI_BASE_URL || XAI_DEFAULT_BASE_URL).replace(/\/+$/, "") };
 	const customEndpoint = transport.baseURL.replace(/\/+$/, "") !== XAI_DEFAULT_BASE_URL;
 	const credentialOrigin = params.authStorage.getCredentialOrigin(auth.provider);
 	if (
