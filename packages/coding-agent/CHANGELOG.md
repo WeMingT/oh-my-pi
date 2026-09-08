@@ -27,6 +27,8 @@
 - `omp models` now reports whether a model's images actually reach the provider, so an id stripped by a text-only catalog rule no longer shows `images: yes` ([#9697](https://github.com/can1357/oh-my-pi/issues/9697)).
 
 ## [18.1.16] - 2026-09-09
+- Provider credit-exhaustion detection also recognizes balance/billing exhaustion phrases ("insufficient balance", "billing account suspended") and Chinese quota-exhaustion rejections (余额不足/额度已用尽), so relay rejections map to the compact credits-exhausted error instead of raw HTTP text.
+- GitHub Copilot model-policy 403s (plan, model policy, org restriction) no longer delete stored credentials, so the provider stays listed in `/model` after a per-model access denial instead of disappearing until the next `/login` ([#11280](https://github.com/can1357/oh-my-pi/pull/11280) by [@H4vC](https://github.com/H4vC)).
 
 ### Added
 

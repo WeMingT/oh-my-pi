@@ -107,7 +107,8 @@ export function toSearchSources(
  * Returns `null` when the response does not match a known quota/auth signal,
  * leaving the caller to throw its provider-specific fallback error.
  */
-const CREDIT_BODY_PATTERN = /credits?\s*(?:exhausted|exceeded)|quota|insufficient/i;
+const CREDIT_BODY_PATTERN =
+	/credits?\s*(?:exhausted|exceeded)|quota|insufficient|(?:credit\s*)?(?:balance|billing)\s*(?:[a-z]+\s*)*(?:exhausted|exceeded|insufficient|suspended|overdue|past\s*due)|(?:额度|余额)\s*(?:已\s*)?(?:不足|用尽|耗尽|用完|超[限额])|(?:不足|用尽|耗尽)\s*(?:额度|余额)/i;
 
 export function classifyProviderHttpError(
 	provider: SearchProviderId,
