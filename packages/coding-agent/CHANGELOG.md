@@ -4,11 +4,11 @@
 
 ### Changed
 
-- The `xai` web-search provider now uses `grok-4.6` (same list price, roughly a third of the server-side tool calls per query) and its model is configurable via `providers.webSearchXaiModel` / `XAI_SEARCH_MODEL`.
+- The `xai` web-search provider now follows the provider's catalog default model (`grok-4.6` — same list price, roughly a third of the server-side tool calls per query) and its model is configurable via `providers.webSearchXaiModel` / `XAI_SEARCH_MODEL`.
 
 ### Added
 
-- Registry-less callers of the `xai` web-search provider (e.g. SDK custom-tool embedding without a model registry) now honor `XAI_BASE_URL` instead of hardcoding the official endpoint, matching the registry path.
+- Registry-less callers of the `xai` web-search provider (e.g. SDK custom-tool embedding without a model registry) now honor `XAI_BASE_URL` instead of hardcoding the official endpoint, matching the registry path. A `XAI_BASE_URL` relay also falls back to the plain `xai` API key when a stored `xai-oauth` credential would otherwise refuse the custom endpoint.
 
 ### Fixed
 

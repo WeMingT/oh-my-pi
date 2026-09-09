@@ -1,6 +1,12 @@
 import { type ApiKey, type ApiKeyResolver, type AuthStorage, withAuth } from "@oh-my-pi/pi-ai";
+import { DEFAULT_MODEL_PER_PROVIDER } from "@oh-my-pi/pi-catalog/provider-models/descriptors";
 import { $env } from "@oh-my-pi/pi-utils";
-import { resolveXAIHttpTransport, type XAIHttpProvider, type XAIHttpTransport } from "../../../lib/xai-http";
+import {
+	resolveXAIHttpTransport,
+	XAI_DEFAULT_BASE_URL,
+	type XAIHttpProvider,
+	type XAIHttpTransport,
+} from "../../../lib/xai-http";
 import type { SearchCitation, SearchResponse, SearchSource, SearchUsage } from "../../../web/search/types";
 import { SearchProviderError } from "../../../web/search/types";
 import { formatQuery, parseSearchQuery, type QuerySyntax } from "../query";
@@ -9,16 +15,14 @@ import type { SearchParams } from "./base";
 import { SearchProvider } from "./base";
 import { classifyProviderHttpError, withHardTimeout } from "./utils";
 
-const XAI_DEFAULT_BASE_URL = "https://api.x.ai/v1";
-const XAI_WEB_SEARCH_MODEL = "grok-4.6";
+const XAI_WEB_SEARCH_MODEL = DEFAULT_MODEL_PER_PROVIDER.xai;
 
 /**
  * Resolve the model id for an xAI web-search call. `XAI_SEARCH_MODEL` wins as
  * a per-machine override (mirrors `GEMINI_SEARCH_MODEL` on the Gemini
- * provider), then the orchestrator-passed setting, then the default.
- * grok-4.5 and grok-4.6 share list pricing, but grok-4.6 settles the same
- * query in roughly a third of the server-side tool calls, so it is both
- * faster and cheaper as the default.
+ * provider), then the orchestrator-passed setting, then the catalog default
+ * for `xai` (`DEFAULT_MODEL_PER_PROVIDER`), so the search model follows the
+ * provider's catalog default instead of drifting behind it.
  */
 function resolveXAIWebSearchModel(configuredModel: string | undefined): string {
 	const envModel = $env.XAI_SEARCH_MODEL?.trim();
@@ -382,15 +386,21 @@ interface XAIWebSearchAuth {
 	keyOrResolver: ApiKey;
 }
 
-function resolveXAIWebSearchAuth(params: SearchParams): XAIWebSearchAuth {
+function resolveXAIWebSearchAuth(params: SearchParams, customEndpoint: boolean): XAIWebSearchAuth {
 	const xaiResolver = params.authStorage.resolver("xai", {
 		sessionId: params.sessionId,
 	});
-	const xaiOAuthOrigin = params.authStorage.getCredentialOrigin("xai-oauth");
 	if (!shouldPreferXAIOAuth(params.authStorage)) {
 		return { provider: "xai", keyOrResolver: xaiResolver };
 	}
+	if (customEndpoint && params.authStorage.hasAuth("xai")) {
+		// Relay/self-hosted endpoint: official xAI OAuth credentials must not
+		// leave x.ai, so fall back to the plain xai key when one exists
+		// instead of failing the relay configuration.
+		return { provider: "xai", keyOrResolver: xaiResolver };
+	}
 
+	const xaiOAuthOrigin = params.authStorage.getCredentialOrigin("xai-oauth");
 	const xaiOAuthResolver = params.authStorage.resolver("xai-oauth", {
 		sessionId: params.sessionId,
 	});
@@ -411,15 +421,13 @@ function resolveXAIWebSearchAuth(params: SearchParams): XAIWebSearchAuth {
 
 /** Execute xAI Responses API web search. */
 export async function searchXAI(params: SearchParams): Promise<SearchResponse> {
-	const auth = resolveXAIWebSearchAuth(params);
 	const modelId = resolveXAIWebSearchModel(params.xaiModel);
-	const transport: XAIHttpTransport = params.modelRegistry
-		? resolveXAIHttpTransport(params.modelRegistry, auth.provider, modelId)
-		: // No registry (SDK custom-tool callers that embed web_search without
-			// one, direct searchXAI callers): honor XAI_BASE_URL like the
-			// registry path does, instead of hardcoding the official endpoint.
-			{ baseURL: ($env.XAI_BASE_URL || XAI_DEFAULT_BASE_URL).replace(/\/+$/, "") };
+	// Registry-less callers (SDK custom-tool embedding without one, direct
+	// searchXAI callers) share the resolver: its env/default legs apply.
+	const preferredProvider: XAIHttpProvider = shouldPreferXAIOAuth(params.authStorage) ? "xai-oauth" : "xai";
+	const transport: XAIHttpTransport = resolveXAIHttpTransport(params.modelRegistry, preferredProvider, modelId);
 	const customEndpoint = transport.baseURL.replace(/\/+$/, "") !== XAI_DEFAULT_BASE_URL;
+	const auth = resolveXAIWebSearchAuth(params, customEndpoint);
 	const credentialOrigin = params.authStorage.getCredentialOrigin(auth.provider);
 	if (
 		customEndpoint &&
@@ -428,7 +436,7 @@ export async function searchXAI(params: SearchParams): Promise<SearchResponse> {
 	) {
 		throw new SearchProviderError(
 			"xai",
-			`Refusing to send official xAI OAuth credentials to custom endpoint ${transport.baseURL}. Configure an API key for provider "xai-oauth".`,
+			`Refusing to send official xAI OAuth credentials to custom endpoint ${transport.baseURL}. Configure an API key for provider "xai".`,
 		);
 	}
 	const keyOrResolver: ApiKey = customEndpoint
