@@ -357,6 +357,8 @@ describe("isAccountQuotaExhaustedText", () => {
 		// punctuation breaks a negation chain, so "not written, quota" does
 		// not negate "exceeded".
 		expect(isAccountQuotaExhaustedText("characters not written, quota exceeded")).toBe(true);
+		// A nearby second clause cannot satisfy the cap either.
+		expect(isAccountQuotaExhaustedText("subscription cap not reached; job exhausted")).toBe(false);
 		expect(isAccountQuotaExhaustedText("quota exceeded")).toBe(true);
 	});
 
@@ -373,6 +375,8 @@ describe("isAccountQuotaExhaustedText", () => {
 		expect(isAccountQuotaExhaustedText("Your quota has been reached")).toBe(true);
 		expect(isAccountQuotaExhaustedText("You have reached your quota")).toBe(true);
 		expect(isAccountQuotaExhaustedText("usage limit has been reached")).toBe(true);
+		expect(isAccountQuotaExhaustedText("quota limit reached")).toBe(true);
+		expect(isAccountQuotaExhaustedText("monthly quota limit has been reached")).toBe(true);
 	});
 
 	it("rejects infrastructure exhaustion phrasing", () => {
