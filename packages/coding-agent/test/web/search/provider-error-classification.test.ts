@@ -5,10 +5,10 @@ describe("classifyProviderHttpError credit-signal coverage", () => {
 	it.each([
 		["insufficient_quota", 429],
 		["credits_exhausted", 402],
-		["Your balance is insufficient", 402],
-		["billing account suspended", 403],
-		["Your credit balance has been exhausted", 402],
-		["billing is overdue", 403],
+		["Your balance is insufficient", 400],
+		["billing account suspended", 400],
+		["Your credit balance has been exhausted", 400],
+		["billing is overdue", 400],
 		["账户额度已用尽", 429],
 		["余额不足，请充值", 400],
 	])("maps %s (%d) to a credits-exhausted error", (body, status) => {
@@ -27,15 +27,18 @@ describe("classifyProviderHttpError credit-signal coverage", () => {
 		expect(classifyProviderHttpError("xai", 400, "额度上限说明见文档")).toBeNull();
 		expect(classifyProviderHttpError("xai", 500, "internal error")).toBeNull();
 		expect(classifyProviderHttpError("xai", 429, "rate limited, retry later")).toBeNull();
+		expect(classifyProviderHttpError("xai", 500, "load balancer request exceeded timeout")).toBeNull();
+		expect(classifyProviderHttpError("xai", 500, "billing webhook exceeded its retry deadline")).toBeNull();
+		expect(classifyProviderHttpError("xai", 400, "balance exceededness is not a valid field")).toBeNull();
 	});
 
 	it("stays linear on bodies stuffed with repeated billing tokens", () => {
-		// An unanchored scan retries the gap from every `billing ` match
-		// position; with an unbounded gap that is quadratic (~seconds on an
-		// 80 KB error page). The bounded {0,40} gap keeps it linear. The
-		// assertion is the null result; the runtime bound is the contract.
+		// Repeated prefixes formerly retried the rest of the body at each
+		// position. A generous ceiling detects that multi-second stall.
 		const adversarial = "billing ".repeat(10 * 1024);
+		const started = performance.now();
 		expect(classifyProviderHttpError("xai", 400, adversarial)).toBeNull();
+		expect(performance.now() - started).toBeLessThan(1000);
 	});
 
 	it("maps Chinese quota-exhaustion bodies via the shared classifier", () => {

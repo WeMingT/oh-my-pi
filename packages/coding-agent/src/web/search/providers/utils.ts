@@ -108,24 +108,19 @@ export function toSearchSources(
  * Returns `null` when the response does not match a known quota/auth signal,
  * leaving the caller to throw its provider-specific fallback error.
  */
-// The gap between `balance`/`billing` and the terminal state word is bounded
-// ({0,40}) so an unanchored scan over a body stuffed with repeated `billing`
-// tokens cannot retry an unbounded suffix from every match position —
-// connector text like "is", "account is", "has been" is far shorter than 40.
+// Match account state phrases, not arbitrary text after a billing-related
+// substring (e.g. "load balancer" or "billing webhook exceeded ..."). Fixed
+// optional phrase components avoid unbounded connector scans.
 const CREDIT_BODY_PATTERN =
-	/credits?\s*(?:exhausted|exceeded)|quota|insufficient|(?:credit\s*)?(?:balance|billing)\s*[a-z\s]{0,40}(?:exhausted|exceeded|insufficient|suspended|overdue|past\s*due)|(?:额度|余额)\s*(?:已\s*)?(?:不足|用尽|耗尽|用完|超[限额])|(?:不足|用尽|耗尽)\s*(?:额度|余额)/i;
+	/credits?\s*(?:exhausted|exceeded)|quota|insufficient|\b(?:balance|billing(?:[ \t]+account)?)(?:[ \t]+(?:is|was|has[ \t]+been))?[ \t]+(?:exhausted|exceeded|insufficient|suspended|overdue|past[ \t]+due)\b|(?:额度|余额)\s*(?:已\s*)?(?:不足|用尽|耗尽|用完|超[限额])|(?:不足|用尽|耗尽)\s*(?:额度|余额)/i;
 
 export function classifyProviderHttpError(
 	provider: SearchProviderId,
 	status: number,
 	body: string,
 ): SearchProviderError | null {
-	// `matchesUsageLimitText` (pi-ai) is the shared quota/usage-limit text
-	// classifier — including the Simplified-Chinese quota-exhaustion phrasing
-	// (额度/配额已用尽) this pattern does not spell out — so delegate to it
-	// instead of duplicating a narrower CN arm. Both tests are unions: the
-	// local pattern keeps the billing-state and 余额/不足 wording, the shared
-	// classifier adds quota/spend/subscription caps.
+	// Reuse quota/spend/subscription classification, including Chinese quota
+	// wording and its transient-rate-limit exclusions.
 	if (CREDIT_BODY_PATTERN.test(body) || matchesUsageLimitText(body)) {
 		return new SearchProviderError(provider, `${provider}: credits exhausted`, status);
 	}

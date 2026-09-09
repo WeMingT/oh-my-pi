@@ -28,6 +28,7 @@
 
 ## [18.1.16] - 2026-09-09
 - Provider credit-exhaustion detection also recognizes balance/billing exhaustion phrases ("insufficient balance", "billing account suspended") and Chinese quota-exhaustion rejections (余额不足/额度已用尽), so relay rejections map to the compact credits-exhausted error instead of raw HTTP text.
+- Provider credit-exhaustion detection recognizes balance/billing account-state phrases and Chinese quota rejections (including 配额已耗尽), without treating load-balancer or billing-webhook failures as exhausted credits.
 - GitHub Copilot model-policy 403s (plan, model policy, org restriction) no longer delete stored credentials, so the provider stays listed in `/model` after a per-model access denial instead of disappearing until the next `/login` ([#11280](https://github.com/can1357/oh-my-pi/pull/11280) by [@H4vC](https://github.com/H4vC)).
 
 ### Added
