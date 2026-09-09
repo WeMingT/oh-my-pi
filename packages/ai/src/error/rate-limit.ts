@@ -320,44 +320,52 @@ export function isUsageLimitStatus(status: number | undefined): boolean {
  * like "usage limit configuration is invalid" stays raw), `credit(s)` must
  * sit in an exhaustion state phrase (a bare "Credit card …" is payment
  * context), balance/billing take the account-state shapes, Chinese
- * quota/balance exhaustion wording counts, and subscription-cap phrasing is
- * accepted via matchesSubscriptionCapText (transient per-second/minute caps
- * excluded).
+ * quota/balance exhaustion wording counts, and subscription caps require
+ * their own exhaustion phrase (transient per-second/minute caps excluded).
  */
 const BILLING_ACCOUNT_STATE_PATTERN =
-	/\b(?:insufficient\s+(?:credit\s+)?balance|(?:balance|billing(?:[ \t]+account)?)(?:[ \t]+(?:is|was|are|were|has[ \t]+been))?[ \t]+(?:exhausted|exceeded|insufficient|suspended|overdue|past[ \t]+due))\b/i;
-// Terminal state words that make a quota/limit/subscription token an
-// account-cap diagnosis. Probed individually so negations ("has not been
-// reached") can be told apart from affirmative uses.
-const TERMINAL_STATE_PATTERN =
-	/reached|exceeded|exhausted|depleted|hit|insufficient|will\s+reset|run\s+out\s+of|(?:out\s+of|no)\s+credits/gi;
-// A negation chained to the state word through at most two unpunctuated
-// words ("has not been reached", "never actually exceeded"). Punctuation
-// breaks the chain ("not written, quota exceeded" stays affirmative).
-const NEGATION_CHAIN_PATTERN = /\b(?:not|never)\b(?:\s+\w+){0,2}\s*$/i;
+	/\b(?:insufficient[ \t_-]+(?:credit[ \t_-]+)?balance|(?:balance|billing(?:[ \t]+account)?)(?:[ \t]+(?:is|was|are|were|has[ \t]+been))?[ \t]+(?:exhausted|exceeded|insufficient|suspended|overdue|past[ \t]+due))\b/i;
 
-/** True when a terminal state sits un-negated inside `window`. */
-function windowHasAffirmativeState(window: string): boolean {
-	TERMINAL_STATE_PATTERN.lastIndex = 0;
-	for (let m = TERMINAL_STATE_PATTERN.exec(window); m !== null; m = TERMINAL_STATE_PATTERN.exec(window)) {
-		const before = window.slice(0, m.index);
-		if (!NEGATION_CHAIN_PATTERN.test(before)) return true;
-	}
-	return false;
-}
+// Bind a cap and its state through a small noun/verb grammar, never an
+// arbitrary text window. Both directions share cap/state vocabularies.
+const CAP_SEPARATOR_SOURCE = String.raw`[ \t_-]+`;
+const CAP_COPULA_SOURCE = String.raw`(?:[ \t]+(?:is|are|was|were|has|have|had|been)){0,3}`;
+const CAP_QUALIFIERS_SOURCE = String.raw`(?:[ \t]+(?:your|the|our|its|their|account|all|available|current|daily|weekly|monthly|annual|yearly)){0,3}`;
+// Reject non-word positions before scanning backwards for a negation.
+const CAP_START_SOURCE = String.raw`\b(?<!\b(?:not|never)[ \t]+(?:\w+[ \t]+){0,2})`;
+// Noun-first clauses only inherit an adjacent negation, not a prior cause
+// such as "could not complete because quota is exhausted".
+const CAP_SUBJECT_START_SOURCE = String.raw`\b(?<!\b(?:not|never)[ \t]+)`;
+const CAP_STATE_SOURCE = "(?:exhausted|exceeded|depleted|reached|hit|insufficient)";
+const CAP_SUBJECT_SOURCE = String.raw`(?:quota(?:[ \t_-]+limit)?|(?:usage|spend(?:ing)?)[ \t_-]?limit)`;
+const CREDIT_SUBJECT_SOURCE = String.raw`credits?(?:[ \t]+(?:account|balance)){0,2}`;
+const CREDIT_STATE_SOURCE = "(?:exhausted|exceeded|depleted|insufficient)";
+const SUBSCRIPTION_SOURCE = "(?:subscription|plan|membership)(?:'s)?";
+const SUBSCRIPTION_LIMIT_SOURCE = String.raw`(?:rate[ \t_-]?limits?|quota|cap)`;
+const SUBSCRIPTION_CAP_SOURCE =
+	String.raw`(?:${SUBSCRIPTION_SOURCE}${CAP_SEPARATOR_SOURCE}${SUBSCRIPTION_LIMIT_SOURCE}` +
+	String.raw`|${SUBSCRIPTION_LIMIT_SOURCE}${CAP_SEPARATOR_SOURCE}(?:for|of)${CAP_QUALIFIERS_SOURCE}${CAP_SEPARATOR_SOURCE}${SUBSCRIPTION_SOURCE})`;
 
-// Reverse arms (state word first, e.g. "exceeded your quota") must reject a
-// preceding negation chain ("you have not yet exceeded your quota"); the
-// forward arms already exclude negations because their connector sets do not
-// contain not/never.
-const NEGATED_BEFORE = /(?<!\b(?:not|never)\s(?:\w+\s){0,2})/;
-const ACCOUNT_QUOTA_WORDING_PATTERN =
-	/(?:insufficient|exceeded|exhausted|depleted)[_ ]?quota|quota[_ ]?(?:exceeded|reached|exhausted|insufficient|depleted)|\bquota\b(?:\s+(?:is|are|was|were|has|have|had|been|your|the|account|limit|rate)){0,4}[\s-]{0,3}(?:exhausted|exceeded|depleted|reached)\b|(?<!\b(?:not|never)\s(?:\w+\s){0,2})\b(?:exhausted|exceeded|depleted|reached)\b(?:\s+(?:your|the|account|its|their)){0,3}[\s-]{0,3}quota\b|quota.{0,40}will reset|usage.?limit[_ ]?reached|\b(?:usage.?limit|spend[a-z]*[-_ ]?limit)\b(?:\s+(?:has|have|had|been|was|were|is|are|your|the|account|our)){0,3}\s+(?:reached|exceeded|exhausted|hit)\b|(?<!\b(?:not|never)\s(?:\w+\s){0,2})\b(?:reached|exceeded|exhausted)\b(?:\s+(?:your|the|our|account)){0,3}\s+(?:usage.?limit|spend[a-z]*[-_ ]?limit)\b|\b(?:run out of|out of|no)\s+credits?\b|\bcredits?\b(?:\s+(?:is|are|was|were|have|has|been|account|balance)){0,3}[\s-]{0,3}(?:exhausted|depleted|insufficient|exceeded)\b|(?<!\b(?:not|never)\s(?:\w+\s){0,2})\b(?:insufficient|exhausted|depleted|exceeded)\b(?:\s+(?:your|the|all|available|account|balance)){0,2}[\s-]{0,3}credits?\b/i;
+const ACCOUNT_QUOTA_WORDING_PATTERN = new RegExp(
+	String.raw`${CAP_SUBJECT_START_SOURCE}(?:${CAP_SUBJECT_SOURCE}${CAP_COPULA_SOURCE}${CAP_SEPARATOR_SOURCE}(?:${CAP_STATE_SOURCE}|will[ \t]+reset)` +
+		String.raw`|${CREDIT_SUBJECT_SOURCE}${CAP_COPULA_SOURCE}${CAP_SEPARATOR_SOURCE}${CREDIT_STATE_SOURCE})\b` +
+		String.raw`|${CAP_START_SOURCE}(?:${CAP_STATE_SOURCE}${CAP_QUALIFIERS_SOURCE}${CAP_SEPARATOR_SOURCE}${CAP_SUBJECT_SOURCE}` +
+		String.raw`|${CREDIT_STATE_SOURCE}${CAP_QUALIFIERS_SOURCE}${CAP_SEPARATOR_SOURCE}${CREDIT_SUBJECT_SOURCE}` +
+		String.raw`|(?:run[ \t]+out[ \t]+of|out[ \t]+of|no)[ \t]+credits?)\b`,
+	"i",
+);
+const SUBSCRIPTION_QUOTA_STATE_PATTERN = new RegExp(
+	String.raw`${CAP_SUBJECT_START_SOURCE}(?:${SUBSCRIPTION_CAP_SOURCE}${CAP_COPULA_SOURCE}${CAP_SEPARATOR_SOURCE}${CAP_STATE_SOURCE}` +
+		String.raw`|${SUBSCRIPTION_SOURCE}${CAP_COPULA_SOURCE}${CAP_SEPARATOR_SOURCE}${CAP_STATE_SOURCE}${CAP_QUALIFIERS_SOURCE}${CAP_SEPARATOR_SOURCE}${SUBSCRIPTION_LIMIT_SOURCE}` +
+		String.raw`|${SUBSCRIPTION_LIMIT_SOURCE}${CAP_COPULA_SOURCE}${CAP_SEPARATOR_SOURCE}${CAP_STATE_SOURCE}${CAP_SEPARATOR_SOURCE}(?:for|of)${CAP_QUALIFIERS_SOURCE}${CAP_SEPARATOR_SOURCE}${SUBSCRIPTION_SOURCE})\b` +
+		String.raw`|${CAP_START_SOURCE}${CAP_STATE_SOURCE}${CAP_QUALIFIERS_SOURCE}${CAP_SEPARATOR_SOURCE}${SUBSCRIPTION_CAP_SOURCE}\b`,
+	"i",
+);
 // Affirmative Chinese quota-exhaustion phrases; the parser-level
 // CN_QUOTA_EXHAUSTED_PATTERN also carries bare 使用…上限 co-occurrence, which
 // alone is validation wording ("使用上限配置无效"), not exhaustion.
 const CN_TERMINAL_QUOTA_PATTERN =
-	/(?:额度|配额|余额)(?:已)?(?:用|耗)(?:完|尽)|(?:额度|配额|余额|余额)不足|已达[到]?.{0,6}(?:上限|限额)/;
+	/(?:额度|配额|余额)(?:已)?(?:用|耗)(?:完|尽)|(?:额度|配额|余额)不足|已达[到]?.{0,6}(?:上限|限额)/;
 
 export function isAccountQuotaExhaustedText(message: string): boolean {
 	// Balance/billing account-state phrases are self-contained diagnostics
@@ -369,21 +377,10 @@ export function isAccountQuotaExhaustedText(message: string): boolean {
 	if (reason !== "QUOTA_EXHAUSTED" && reason !== "INSUFFICIENT_G1_CREDITS_BALANCE") return false;
 	// The structured G1 credits-balance reason is authoritative on its own.
 	if (reason === "INSUFFICIENT_G1_CREDITS_BALANCE") return true;
-	// Subscription-cap evidence needs an affirmative terminal state near the
-	// matched cap phrase: bare metadata validation ("subscription plan cap
-	// must be positive"), negated caps, and unrelated exhaustion elsewhere
-	// must all stay raw.
-	if (matchesSubscriptionCapText(message)) {
-		const m = SUBSCRIPTION_CAP_PATTERN.exec(message);
-		if (m) {
-			const near = message.slice(Math.max(0, m.index - 16), Math.min(message.length, m.index + m[0].length + 16));
-			if (windowHasAffirmativeState(near)) return true;
-		}
-	}
+	if (matchesSubscriptionCapText(message) && SUBSCRIPTION_QUOTA_STATE_PATTERN.test(message)) return true;
 	if (CN_TERMINAL_QUOTA_PATTERN.test(message) && !CN_TRANSIENT_CAP_PATTERN.test(message)) return true;
-	// The wording arms are phrase-level: connector sets exclude negations and
-	// the reverse arms reject negation chains, so an affirmative state
-	// elsewhere in the body cannot satisfy a negated quota phrase.
+	// Qualifiers cannot cross clause boundaries or contain a negation.
+	// Reverse phrases also reject a negation immediately before the state.
 	return ACCOUNT_QUOTA_WORDING_PATTERN.test(message);
 }
 const STATUS_402_QUOTA_PATTERN =

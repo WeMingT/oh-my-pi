@@ -307,6 +307,21 @@ describe("isAccountQuotaExhaustedText", () => {
 		expect(isAccountQuotaExhaustedText("exceeded your available credits")).toBe(true);
 	});
 
+	it.each([
+		["machine-readable balance", "insufficient_balance"],
+		["quota insufficiency", "Your quota is insufficient"],
+		["period-qualified quota", "You have exceeded your monthly quota"],
+	])("recognizes %s exhaustion in provider error bodies", (_kind, message) => {
+		expect(isAccountQuotaExhaustedText(message)).toBe(true);
+	});
+
+	it("keeps causal negation outside affirmative quota clauses", () => {
+		expect(isAccountQuotaExhaustedText("Request could not complete because quota is exhausted")).toBe(true);
+		expect(isAccountQuotaExhaustedText("Request could not complete because subscription cap is exhausted")).toBe(
+			true,
+		);
+	});
+
 	it("accepts subscription-cap phrasing the reason parser routes to quota", () => {
 		expect(isAccountQuotaExhaustedText("Your subscription has reached its rate limit")).toBe(true);
 		expect(isAccountQuotaExhaustedText("monthly plan cap exceeded")).toBe(true);
@@ -315,6 +330,21 @@ describe("isAccountQuotaExhaustedText", () => {
 		expect(isAccountQuotaExhaustedText("subscription rate limit per minute")).toBe(false);
 		expect(isAccountQuotaExhaustedText("Your limit will reset in 30 seconds")).toBe(false);
 		expect(isAccountQuotaExhaustedText("subscription plan cap must be positive")).toBe(false);
+	});
+
+	it("accepts cap-first subscription exhaustion without negated or transient states", () => {
+		expect(isAccountQuotaExhaustedText("Rate limit exceeded for your subscription")).toBe(true);
+		expect(isAccountQuotaExhaustedText("The rate limit for your subscription is exhausted")).toBe(true);
+		expect(isAccountQuotaExhaustedText("You have exceeded the rate limit for your subscription")).toBe(true);
+		expect(isAccountQuotaExhaustedText("Rate limit not exceeded for your subscription")).toBe(false);
+		expect(isAccountQuotaExhaustedText("Rate limit exceeded per minute for your subscription")).toBe(false);
+	});
+
+	it.each([
+		["another clause", "subscription cap; job exhausted"],
+		["part of another word", "subscription cap must be whitelisted"],
+	])("rejects subscription states that belong to %s", (_kind, message) => {
+		expect(isAccountQuotaExhaustedText(message)).toBe(false);
 	});
 
 	it("accepts balance/billing account-state phrases without a rate-limit reason", () => {
@@ -404,6 +434,13 @@ describe("isAccountQuotaExhaustedText", () => {
 		const adversarial = "billing ".repeat(10 * 1024);
 		const started = performance.now();
 		expect(isAccountQuotaExhaustedText(adversarial)).toBe(false);
+		expect(performance.now() - started).toBeLessThan(1000);
+	});
+
+	it("bounds matching time for long whitespace inside a quota phrase", () => {
+		const body = `quota${" ".repeat(100_000)}configuration invalid`;
+		const started = performance.now();
+		expect(isAccountQuotaExhaustedText(body)).toBe(false);
 		expect(performance.now() - started).toBeLessThan(1000);
 	});
 });
