@@ -313,12 +313,13 @@ export function isUsageLimitStatus(status: number | undefined): boolean {
 /**
  * Account-quota-specific text predicate for consumers that classify whole
  * provider error bodies (not pre-filtered retry text): accepts QUOTA /
- * G1-credits reasons only when the message carries quota-account wording
- * (quota, credits, spend limit, usage limit, CN quota phrases), so the reason
- * parser's generic bare-`exhausted` branch ("retry attempts exhausted",
- * "connection pool exhausted") does not mislabel infrastructure failures.
+ * G1-credits reasons only when the message carries quota-account phrasing —
+ * a quota/usage/spend-limit token, CN quota wording, or `credit(s)` in an
+ * exhaustion state phrase. A bare `credit` token (e.g. "Credit card
+ * processing retries exhausted") is payment-context, not account quota.
  */
-const ACCOUNT_QUOTA_WORDING_PATTERN = /quota|credits?|spend[a-z]*[-_ ]?limit|usage.?limit|额度|配额/i;
+const ACCOUNT_QUOTA_WORDING_PATTERN =
+	/quota|spend[a-z]*[-_ ]?limit|usage.?limit|额度|配额|\b(?:run out of|out of|no)\s+credits?\b|\bcredits?\b(?:\s+(?:is|are|was|were|have|has|been|account|balance)){0,3}[\s-]{0,3}(?:exhausted|depleted|insufficient|exceeded)\b|\b(?:insufficient|exhausted|depleted|exceeded)\b(?:\s+(?:your|the|all|available|account|balance)){0,2}[\s-]{0,3}credits?\b/i;
 export function isAccountQuotaExhaustedText(message: string): boolean {
 	const reason = parseRateLimitReason(message);
 	if (reason !== "QUOTA_EXHAUSTED" && reason !== "INSUFFICIENT_G1_CREDITS_BALANCE") return false;

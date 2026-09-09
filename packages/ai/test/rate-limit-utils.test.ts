@@ -298,6 +298,10 @@ describe("isAccountQuotaExhaustedText", () => {
 		expect(isAccountQuotaExhaustedText("quota exceeded")).toBe(true);
 		expect(isAccountQuotaExhaustedText("usage limit reached")).toBe(true);
 		expect(isAccountQuotaExhaustedText("配额已耗尽")).toBe(true);
+		expect(isAccountQuotaExhaustedText("run out of credits")).toBe(true);
+		expect(isAccountQuotaExhaustedText("credits exhausted")).toBe(true);
+		expect(isAccountQuotaExhaustedText("credit balance has been exhausted")).toBe(true);
+		expect(isAccountQuotaExhaustedText("exceeded your available credits")).toBe(true);
 	});
 
 	it("rejects infrastructure exhaustion phrasing", () => {
@@ -307,6 +311,11 @@ describe("isAccountQuotaExhaustedText", () => {
 		expect(isAccountQuotaExhaustedText("retry attempts exhausted")).toBe(false);
 		expect(isAccountQuotaExhaustedText("connection pool exhausted")).toBe(false);
 		expect(isAccountQuotaExhaustedText("resource_exhausted")).toBe(false);
+		// A bare `credit` token in a payment/infrastructure context must not
+		// pass the credits-proximity arm.
+		expect(isAccountQuotaExhaustedText("Credit card processing retries exhausted")).toBe(false);
+		expect(isAccountQuotaExhaustedText("credit card charged, retries exhausted")).toBe(false);
+		expect(isAccountQuotaExhaustedText("credit card processing exceeded retry deadline")).toBe(false);
 	});
 });
 
