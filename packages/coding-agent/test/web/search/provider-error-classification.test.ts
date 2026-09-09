@@ -52,6 +52,17 @@ describe("classifyProviderHttpError", () => {
 		}
 	});
 
+	it("keeps authorization summaries for broad insufficient wording on auth statuses", () => {
+		// The legacy broad heuristic matches auth wording such as "insufficient
+		// authentication scope"; on 401/403 that must stay an authorization
+		// failure instead of being exposed as a billing diagnosis.
+		const body = JSON.stringify({ error: { message: "insufficient authentication scope" } });
+		expect(classifyProviderHttpError("xai", 403, body)?.message).toContain("403 forbidden");
+		expect(classifyProviderHttpError("xai", 401, body)?.message).toContain("401 unauthorized");
+		const error = classifyProviderHttpError("xai", 403, body);
+		expect(formatSearchProviderFailure(error!, { id: "xai", label: "xAI" })).toContain("authorization failed");
+	});
+
 	it("still maps bare 402/401/403 statuses when the body is silent", () => {
 		expect(classifyProviderHttpError("xai", 402, "")?.message).toContain("credits exhausted");
 		expect(classifyProviderHttpError("xai", 401, "")?.message).toContain("401 unauthorized");

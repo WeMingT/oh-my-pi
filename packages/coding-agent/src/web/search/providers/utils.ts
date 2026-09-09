@@ -98,11 +98,31 @@ export function toSearchSources(
 	}));
 }
 
-// Preserve the existing English heuristic; this change only adds known aliases.
+// Legacy English heuristic, unchanged for non-auth statuses. It also matches
+// auth wording such as "insufficient authentication scope", so on 401/403 it
+// must not produce the billing diagnosis (see classifyProviderHttpError).
 const CREDIT_BODY_PATTERN = /credits?\s*(?:exhausted|exceeded)|quota|insufficient/i;
 // Whole messages from the original billing examples, not a natural-language grammar.
 const BILLING_MESSAGE_PATTERN =
 	/^\s*(?:your credit balance has been exhausted|billing account suspended|billing is overdue|(?:账户)?额度已用尽|余额不足(?:，请充值)?)[.!。！]?\s*$/i;
+
+// Whether the body carries one of the exact billing aliases, either as the
+// whole plain-text message or inside a JSON error envelope.
+function hasBillingAliasMessage(body: string): boolean {
+	if (BILLING_MESSAGE_PATTERN.test(body)) return true;
+	const parsed = tryParseJson(body);
+	if (!isRecord(parsed)) return false;
+	// Envelopes can carry an unrelated `error` alongside a recognized
+	// top-level `message`; test every candidate field instead of letting a
+	// present `error` shadow it.
+	const errorField = parsed.error;
+	const candidates: Array<unknown> = [
+		typeof errorField === "string" ? errorField : undefined,
+		isRecord(errorField) ? errorField.message : undefined,
+		parsed.message,
+	];
+	return candidates.some(candidate => typeof candidate === "string" && BILLING_MESSAGE_PATTERN.test(candidate));
+}
 
 /**
  * Quota/auth signals across providers. Telemetry on 15.1.7/15.1.8 showed users
@@ -120,25 +140,11 @@ export function classifyProviderHttpError(
 	status: number,
 	body: string,
 ): SearchProviderError | null {
-	let hasCreditSignal = CREDIT_BODY_PATTERN.test(body) || BILLING_MESSAGE_PATTERN.test(body);
-	if (!hasCreditSignal) {
-		const parsed = tryParseJson(body);
-		if (isRecord(parsed)) {
-			// Envelopes can carry an unrelated `error` alongside a recognized
-			// top-level `message`; test every candidate field instead of
-			// letting a present `error` shadow it.
-			const errorField = parsed.error;
-			const candidates: Array<unknown> = [
-				typeof errorField === "string" ? errorField : undefined,
-				isRecord(errorField) ? errorField.message : undefined,
-				parsed.message,
-			];
-			hasCreditSignal = candidates.some(
-				candidate => typeof candidate === "string" && BILLING_MESSAGE_PATTERN.test(candidate),
-			);
-		}
-	}
-	if (hasCreditSignal) {
+	// Exact billing aliases diagnose a billing failure on any status. The
+	// broad heuristic alone must not diagnose 401/403 responses: auth bodies
+	// like "insufficient authentication scope" would otherwise be exposed as
+	// a billing failure instead of an authorization failure.
+	if (hasBillingAliasMessage(body) || (CREDIT_BODY_PATTERN.test(body) && status !== 401 && status !== 403)) {
 		return new SearchProviderError(provider, `${provider}: credits exhausted`, status);
 	}
 	if (status === 402) {
