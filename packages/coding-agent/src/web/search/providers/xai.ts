@@ -393,14 +393,17 @@ function resolveXAIWebSearchAuth(params: SearchParams, customEndpoint: boolean):
 	if (!shouldPreferXAIOAuth(params.authStorage)) {
 		return { provider: "xai", keyOrResolver: xaiResolver };
 	}
-	if (customEndpoint && params.authStorage.hasAuth("xai")) {
-		// Relay/self-hosted endpoint: official xAI OAuth credentials must not
-		// leave x.ai, so fall back to the plain xai key when one exists
-		// instead of failing the relay configuration.
+	const xaiOAuthOrigin = params.authStorage.getCredentialOrigin("xai-oauth");
+	if (
+		customEndpoint &&
+		(xaiOAuthOrigin?.kind === "oauth" || xaiOAuthOrigin?.kind === "env") &&
+		params.authStorage.hasAuth("xai")
+	) {
+		// Only replace official bearer credentials that the endpoint guard
+		// would reject. Configured proxy keys belong to their own transport.
 		return { provider: "xai", keyOrResolver: xaiResolver };
 	}
 
-	const xaiOAuthOrigin = params.authStorage.getCredentialOrigin("xai-oauth");
 	const xaiOAuthResolver = params.authStorage.resolver("xai-oauth", {
 		sessionId: params.sessionId,
 	});

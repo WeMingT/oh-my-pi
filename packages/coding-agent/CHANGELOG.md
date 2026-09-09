@@ -8,7 +8,7 @@
 
 ### Added
 
-- Registry-less callers of the `xai` web-search provider (e.g. SDK custom-tool embedding without a model registry) now honor `XAI_BASE_URL` instead of hardcoding the official endpoint, matching the registry path. A `XAI_BASE_URL` relay also falls back to the plain `xai` API key when a stored `xai-oauth` credential would otherwise refuse the custom endpoint.
+- Registry-less callers of the `xai` web-search provider now honor `XAI_BASE_URL`. Custom endpoints retain their configured `xai-oauth` API keys; only official OAuth/env credentials fall back to an available `xai` key.
 
 ### Fixed
 

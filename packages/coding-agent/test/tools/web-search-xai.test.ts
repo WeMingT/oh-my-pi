@@ -241,7 +241,7 @@ describe("xAI web search provider", () => {
 		});
 	});
 
-	it("uses configured xai-oauth endpoint, API key, and headers together", async () => {
+	it("keeps configured xai-oauth endpoint credentials when an unrelated xai key exists", async () => {
 		const capture = captureFetch({ id: "resp_proxy", model: "grok-4.3", output_text: "proxy answer" });
 
 		await searchXAI({
@@ -249,6 +249,7 @@ describe("xAI web search provider", () => {
 				capture.fetchMock,
 				makeAuthStorage({
 					"xai-oauth": { key: "proxy-key", kind: "config" },
+					xai: "unrelated-official-key",
 				}),
 			),
 			modelRegistry: proxyXaiRegistry,
