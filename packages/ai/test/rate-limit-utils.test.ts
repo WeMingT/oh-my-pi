@@ -409,6 +409,14 @@ describe("isAccountQuotaExhaustedText", () => {
 		expect(isAccountQuotaExhaustedText("monthly quota limit has been reached")).toBe(true);
 	});
 
+	it("accepts explicit resource quota hints without overriding transient reasons", () => {
+		const message = "Resource has been exhausted (e.g. check quota).";
+		expect(isAccountQuotaExhaustedText(message)).toBe(true);
+		expect(isAccountQuotaExhaustedText("Resource has been exhausted.")).toBe(false);
+		expect(isAccountQuotaExhaustedText("Resource has not been exhausted (e.g. check quota).")).toBe(false);
+		expect(isAccountQuotaExhaustedText(googleRpc429("RATE_LIMIT_EXCEEDED", undefined, message))).toBe(false);
+	});
+
 	it("rejects infrastructure exhaustion phrasing", () => {
 		// parseRateLimitReason's generic branch maps these to QUOTA_EXHAUSTED;
 		// whole-body consumers (web-search provider classification) must not

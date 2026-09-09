@@ -361,6 +361,12 @@ const SUBSCRIPTION_QUOTA_STATE_PATTERN = new RegExp(
 		String.raw`|${CAP_START_SOURCE}${CAP_STATE_SOURCE}${CAP_QUALIFIERS_SOURCE}${CAP_SEPARATOR_SOURCE}${SUBSCRIPTION_CAP_SOURCE}\b`,
 	"i",
 );
+// The parenthesized quota hint distinguishes this resource error from a
+// bare transient status. The reason gate still gives rate-limit details priority.
+const RESOURCE_QUOTA_HINT_PATTERN = new RegExp(
+	String.raw`${CAP_SUBJECT_START_SOURCE}resource${CAP_COPULA_SOURCE}${CAP_SEPARATOR_SOURCE}exhausted[ \t]*\([ \t]*(?:e\.g\.[ \t]*)?check[ \t]+quota[ \t]*\)`,
+	"i",
+);
 // Affirmative Chinese quota-exhaustion phrases; the parser-level
 // CN_QUOTA_EXHAUSTED_PATTERN also carries bare 使用…上限 co-occurrence, which
 // alone is validation wording ("使用上限配置无效"), not exhaustion.
@@ -381,7 +387,7 @@ export function isAccountQuotaExhaustedText(message: string): boolean {
 	if (CN_TERMINAL_QUOTA_PATTERN.test(message) && !CN_TRANSIENT_CAP_PATTERN.test(message)) return true;
 	// Qualifiers cannot cross clause boundaries or contain a negation.
 	// Reverse phrases also reject a negation immediately before the state.
-	return ACCOUNT_QUOTA_WORDING_PATTERN.test(message);
+	return ACCOUNT_QUOTA_WORDING_PATTERN.test(message) || RESOURCE_QUOTA_HINT_PATTERN.test(message);
 }
 const STATUS_402_QUOTA_PATTERN =
 	/\b(?:payment(?:\s+is)?[-_.\s]*required|deactivated_workspace|insufficient.?balance)\b/i;
@@ -467,7 +473,7 @@ export function isOpaqueStatusBody(message: string): boolean {
  * Note: this matcher accepts bare `resource_exhausted` (transient capacity),
  * so consumers that need the transient/quota distinction — e.g. the
  * coding-agent web-search error classifier — should use
- * {@link parseRateLimitReason} instead.
+ * {@link isAccountQuotaExhaustedText} instead.
  */
 export function matchesUsageLimitText(errorMessage: string): boolean {
 	const structuredReason = parseGoogleRpcRateLimitReason(errorMessage);
