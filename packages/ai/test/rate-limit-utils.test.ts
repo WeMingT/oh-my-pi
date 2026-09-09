@@ -315,6 +315,14 @@ describe("isAccountQuotaExhaustedText", () => {
 		expect(isAccountQuotaExhaustedText(message)).toBe(true);
 	});
 
+	it("accepts affirmative modal exceedance without treating permissions or negation as exhaustion", () => {
+		expect(isAccountQuotaExhaustedText("This request would exceed your quota")).toBe(true);
+		expect(isAccountQuotaExhaustedText("This request would exceed your available credits")).toBe(true);
+		expect(isAccountQuotaExhaustedText("This request would exceed your subscription rate limit")).toBe(true);
+		expect(isAccountQuotaExhaustedText("This request would not exceed your quota")).toBe(false);
+		expect(isAccountQuotaExhaustedText("A request can exceed your quota")).toBe(false);
+	});
+
 	it("keeps causal negation outside affirmative quota clauses", () => {
 		expect(isAccountQuotaExhaustedText("Request could not complete because quota is exhausted")).toBe(true);
 		expect(isAccountQuotaExhaustedText("Request could not complete because subscription cap is exhausted")).toBe(
@@ -399,6 +407,8 @@ describe("isAccountQuotaExhaustedText", () => {
 		// Affirmative exhaustion still maps.
 		expect(isAccountQuotaExhaustedText("配额已耗尽")).toBe(true);
 		expect(isAccountQuotaExhaustedText("已达使用上限")).toBe(true);
+		expect(isAccountQuotaExhaustedText("已经达到使用上限")).toBe(true);
+		expect(isAccountQuotaExhaustedText("已经达到每分钟使用上限")).toBe(false);
 	});
 
 	it("accepts reached as a copula terminal state", () => {

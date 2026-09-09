@@ -337,6 +337,9 @@ const CAP_START_SOURCE = String.raw`\b(?<!\b(?:not|never)[ \t]+(?:\w+[ \t]+){0,2
 // such as "could not complete because quota is exhausted".
 const CAP_SUBJECT_START_SOURCE = String.raw`\b(?<!\b(?:not|never)[ \t]+)`;
 const CAP_STATE_SOURCE = "(?:exhausted|exceeded|depleted|reached|hit|insufficient)";
+// Keep modal actions separate from noun-first states: available credits can
+// exceed a requested amount without the account being exhausted.
+const CAP_MODAL_EXCEED_SOURCE = String.raw`(?:would|will)[ \t]+exceed`;
 const CAP_SUBJECT_SOURCE = String.raw`(?:quota(?:[ \t_-]+limit)?|(?:usage|spend(?:ing)?)[ \t_-]?limit)`;
 const CREDIT_SUBJECT_SOURCE = String.raw`credits?(?:[ \t]+(?:account|balance)){0,2}`;
 const CREDIT_STATE_SOURCE = "(?:exhausted|exceeded|depleted|insufficient)";
@@ -349,16 +352,16 @@ const SUBSCRIPTION_CAP_SOURCE =
 const ACCOUNT_QUOTA_WORDING_PATTERN = new RegExp(
 	String.raw`${CAP_SUBJECT_START_SOURCE}(?:${CAP_SUBJECT_SOURCE}${CAP_COPULA_SOURCE}${CAP_SEPARATOR_SOURCE}(?:${CAP_STATE_SOURCE}|will[ \t]+reset)` +
 		String.raw`|${CREDIT_SUBJECT_SOURCE}${CAP_COPULA_SOURCE}${CAP_SEPARATOR_SOURCE}${CREDIT_STATE_SOURCE})\b` +
-		String.raw`|${CAP_START_SOURCE}(?:${CAP_STATE_SOURCE}${CAP_QUALIFIERS_SOURCE}${CAP_SEPARATOR_SOURCE}${CAP_SUBJECT_SOURCE}` +
-		String.raw`|${CREDIT_STATE_SOURCE}${CAP_QUALIFIERS_SOURCE}${CAP_SEPARATOR_SOURCE}${CREDIT_SUBJECT_SOURCE}` +
+		String.raw`|${CAP_START_SOURCE}(?:(?:${CAP_STATE_SOURCE}|${CAP_MODAL_EXCEED_SOURCE})${CAP_QUALIFIERS_SOURCE}${CAP_SEPARATOR_SOURCE}${CAP_SUBJECT_SOURCE}` +
+		String.raw`|(?:${CREDIT_STATE_SOURCE}|${CAP_MODAL_EXCEED_SOURCE})${CAP_QUALIFIERS_SOURCE}${CAP_SEPARATOR_SOURCE}${CREDIT_SUBJECT_SOURCE}` +
 		String.raw`|(?:run[ \t]+out[ \t]+of|out[ \t]+of|no)[ \t]+credits?)\b`,
 	"i",
 );
 const SUBSCRIPTION_QUOTA_STATE_PATTERN = new RegExp(
 	String.raw`${CAP_SUBJECT_START_SOURCE}(?:${SUBSCRIPTION_CAP_SOURCE}${CAP_COPULA_SOURCE}${CAP_SEPARATOR_SOURCE}${CAP_STATE_SOURCE}` +
-		String.raw`|${SUBSCRIPTION_SOURCE}${CAP_COPULA_SOURCE}${CAP_SEPARATOR_SOURCE}${CAP_STATE_SOURCE}${CAP_QUALIFIERS_SOURCE}${CAP_SEPARATOR_SOURCE}${SUBSCRIPTION_LIMIT_SOURCE}` +
+		String.raw`|${SUBSCRIPTION_SOURCE}${CAP_COPULA_SOURCE}${CAP_SEPARATOR_SOURCE}(?:${CAP_STATE_SOURCE}|${CAP_MODAL_EXCEED_SOURCE})${CAP_QUALIFIERS_SOURCE}${CAP_SEPARATOR_SOURCE}${SUBSCRIPTION_LIMIT_SOURCE}` +
 		String.raw`|${SUBSCRIPTION_LIMIT_SOURCE}${CAP_COPULA_SOURCE}${CAP_SEPARATOR_SOURCE}${CAP_STATE_SOURCE}${CAP_SEPARATOR_SOURCE}(?:for|of)${CAP_QUALIFIERS_SOURCE}${CAP_SEPARATOR_SOURCE}${SUBSCRIPTION_SOURCE})\b` +
-		String.raw`|${CAP_START_SOURCE}${CAP_STATE_SOURCE}${CAP_QUALIFIERS_SOURCE}${CAP_SEPARATOR_SOURCE}${SUBSCRIPTION_CAP_SOURCE}\b`,
+		String.raw`|${CAP_START_SOURCE}(?:${CAP_STATE_SOURCE}|${CAP_MODAL_EXCEED_SOURCE})${CAP_QUALIFIERS_SOURCE}${CAP_SEPARATOR_SOURCE}${SUBSCRIPTION_CAP_SOURCE}\b`,
 	"i",
 );
 // The parenthesized quota hint distinguishes this resource error from a
@@ -371,7 +374,7 @@ const RESOURCE_QUOTA_HINT_PATTERN = new RegExp(
 // CN_QUOTA_EXHAUSTED_PATTERN also carries bare 使用…上限 co-occurrence, which
 // alone is validation wording ("使用上限配置无效"), not exhaustion.
 const CN_TERMINAL_QUOTA_PATTERN =
-	/(?:额度|配额|余额)(?:已)?(?:用|耗)(?:完|尽)|(?:额度|配额|余额)不足|已达[到]?.{0,6}(?:上限|限额)/;
+	/(?:额度|配额|余额)(?:已)?(?:用|耗)(?:完|尽)|(?:额度|配额|余额)不足|已经?达到?.{0,6}(?:上限|限额)/;
 
 export function isAccountQuotaExhaustedText(message: string): boolean {
 	// Balance/billing account-state phrases are self-contained diagnostics
