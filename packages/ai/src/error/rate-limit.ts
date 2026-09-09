@@ -386,10 +386,13 @@ export function isOpaqueStatusBody(message: string): boolean {
 }
 
 /**
- * Internal text matcher for usage/quota-limit phrasing. NOT part of the public
- * API — callers classify through {@link import("./flags").isUsageLimit} (the
- * flag accessor). `flags.ts` consumes this to populate `Flag.UsageLimit`, and
- * {@link isUsageLimitOutcome} uses it for the account-rotation decision.
+ * Text matcher for usage/quota-limit phrasing, shared by in-package flag
+ * classification and cross-package error classification. `flags.ts` consumes
+ * this to populate `Flag.UsageLimit` (via {@link isUsageLimit}), and
+ * {@link isUsageLimitOutcome} uses it for the account-rotation decision; the
+ * coding-agent web-search provider error classifier
+ * (`classifyProviderHttpError`) unions it with its own billing-state pattern
+ * so quota/credit exhaustion surfaces consistently across surfaces.
  */
 export function matchesUsageLimitText(errorMessage: string): boolean {
 	const structuredReason = parseGoogleRpcRateLimitReason(errorMessage);

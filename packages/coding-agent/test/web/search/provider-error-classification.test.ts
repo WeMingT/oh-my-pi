@@ -29,13 +29,23 @@ describe("classifyProviderHttpError credit-signal coverage", () => {
 		expect(classifyProviderHttpError("xai", 429, "rate limited, retry later")).toBeNull();
 	});
 
-	it("stays linear on adversarial bodies instead of backtracking exponentially", () => {
-		// A balance/billing prefix followed by a long letter run with no
-		// terminal state word: a nested-quantifier pattern backtracks
-		// exponentially here (~seconds at 60 chars). Guards the linear
-		// character class in CREDIT_BODY_PATTERN.
-		const adversarial = `billing ${"a".repeat(60)}`;
+	it("stays linear on bodies stuffed with repeated billing tokens", () => {
+		// An unanchored scan retries the gap from every `billing ` match
+		// position; with an unbounded gap that is quadratic (~seconds on an
+		// 80 KB error page). The bounded {0,40} gap keeps it linear. The
+		// assertion is the null result; the runtime bound is the contract.
+		const adversarial = "billing ".repeat(10 * 1024);
 		expect(classifyProviderHttpError("xai", 400, adversarial)).toBeNull();
+	});
+
+	it("maps Chinese quota-exhaustion bodies via the shared classifier", () => {
+		// 429 has no bare-status fallback, so a 配额已耗尽 body must be
+		// recognized through matchesUsageLimitText (pi-ai) — previously it
+		// fell through to the raw provider error.
+		expect(classifyProviderHttpError("xai", 429, "配额已耗尽")?.message).toContain("credits exhausted");
+		expect(classifyProviderHttpError("xai", 429, "额度已用完")?.message).toContain("credits exhausted");
+		// Transient CN caps (rate/frequency ceilings) are not quota exhaustion.
+		expect(classifyProviderHttpError("xai", 429, "速率达到上限，请稍后重试")).toBeNull();
 	});
 
 	it("still maps bare 402/401/403 statuses when the body is silent", () => {
