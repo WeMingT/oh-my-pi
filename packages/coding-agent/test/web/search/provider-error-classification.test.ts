@@ -23,6 +23,11 @@ describe("classifyProviderHttpError", () => {
 		["error.message", JSON.stringify({ error: { message: "billing account suspended" } })],
 		["error string", JSON.stringify({ error: "billing account suspended" })],
 		["top-level message", JSON.stringify({ message: "billing account suspended" })],
+		[
+			"error object with top-level message",
+			JSON.stringify({ error: { code: "billing_suspended" }, message: "billing account suspended" }),
+		],
+		["error string with top-level message", JSON.stringify({ error: "Bad Request", message: "billing is overdue" })],
 		["escaped error.message", '{"error":{"message":"\\u4f59\\u989d\\u4e0d\\u8db3\\uff0c\\u8bf7\\u5145\\u503c"}}'],
 	])("recognizes a known diagnostic in %s", (_field, body) => {
 		expect(classifyProviderHttpError("xai", 400, body)?.message).toContain("credits exhausted");

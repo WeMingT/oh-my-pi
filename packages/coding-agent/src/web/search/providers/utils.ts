@@ -124,9 +124,18 @@ export function classifyProviderHttpError(
 	if (!hasCreditSignal) {
 		const parsed = tryParseJson(body);
 		if (isRecord(parsed)) {
-			const error = parsed.error;
-			const message = typeof error === "string" ? error : isRecord(error) ? error.message : parsed.message;
-			hasCreditSignal = typeof message === "string" && BILLING_MESSAGE_PATTERN.test(message);
+			// Envelopes can carry an unrelated `error` alongside a recognized
+			// top-level `message`; test every candidate field instead of
+			// letting a present `error` shadow it.
+			const errorField = parsed.error;
+			const candidates: Array<unknown> = [
+				typeof errorField === "string" ? errorField : undefined,
+				isRecord(errorField) ? errorField.message : undefined,
+				parsed.message,
+			];
+			hasCreditSignal = candidates.some(
+				candidate => typeof candidate === "string" && BILLING_MESSAGE_PATTERN.test(candidate),
+			);
 		}
 	}
 	if (hasCreditSignal) {
