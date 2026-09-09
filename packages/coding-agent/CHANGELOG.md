@@ -41,6 +41,7 @@
 - Web search recognizes exhausted credits, subscription limits, and Chinese quota errors without replacing unrelated or negated failures; billing diagnostics are preserved on 401/403 responses.
 - Web search recognizes exhausted credits, subscription limits, explicit resource/quota hints, and Chinese quota errors without replacing unrelated or negated failures; billing diagnostics are preserved on 401/403 responses.
 - Web search recognizes exhausted credits, subscription limits, affirmative quota exceedance, explicit resource/quota hints, and Chinese usage caps without replacing unrelated or negated failures; billing diagnostics are preserved on 401/403 responses.
+- Web search recognizes known balance/billing messages in plain-text and JSON errors, and preserves billing diagnostics on 401/403 responses instead of reporting an authorization failure.
 - GitHub Copilot model-policy 403s (plan, model policy, org restriction) no longer delete stored credentials, so the provider stays listed in `/model` after a per-model access denial instead of disappearing until the next `/login` ([#11280](https://github.com/can1357/oh-my-pi/pull/11280) by [@H4vC](https://github.com/H4vC)).
 
 ### Added

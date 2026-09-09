@@ -1,4 +1,4 @@
-import { isAccountQuotaExhaustedText } from "@oh-my-pi/pi-ai";
+import { isRecord, tryParseJson } from "@oh-my-pi/pi-utils";
 import type { AgentStorage } from "../../../session/agent-storage";
 import {
 	DEFAULT_WEB_SEARCH_TIMEOUT_SECONDS,
@@ -98,6 +98,12 @@ export function toSearchSources(
 	}));
 }
 
+// Preserve the existing English heuristic; this change only adds known aliases.
+const CREDIT_BODY_PATTERN = /credits?\s*(?:exhausted|exceeded)|quota|insufficient/i;
+// Whole messages from the original billing examples, not a natural-language grammar.
+const BILLING_MESSAGE_PATTERN =
+	/^\s*(?:your credit balance has been exhausted|billing account suspended|billing is overdue|(?:账户)?额度已用尽|余额不足(?:，请充值)?)[.!。！]?\s*$/i;
+
 /**
  * Quota/auth signals across providers. Telemetry on 15.1.7/15.1.8 showed users
  * hitting credit-exhaustion and 401/402/403 responses that were surfaced as
@@ -114,12 +120,16 @@ export function classifyProviderHttpError(
 	status: number,
 	body: string,
 ): SearchProviderError | null {
-	// Delegate whole-body quota detection to pi-ai's account-quota predicate
-	// (quota/usage/spend-limit caps with a terminal state, credits near an
-	// exhaustion state, billing account-state, CN quota wording, subscription
-	// caps) — its reason gate keeps bare resource_exhausted and
-	// infrastructure phrasing raw on provider bodies.
-	if (isAccountQuotaExhaustedText(body)) {
+	let hasCreditSignal = CREDIT_BODY_PATTERN.test(body) || BILLING_MESSAGE_PATTERN.test(body);
+	if (!hasCreditSignal) {
+		const parsed = tryParseJson(body);
+		if (isRecord(parsed)) {
+			const error = parsed.error;
+			const message = typeof error === "string" ? error : isRecord(error) ? error.message : parsed.message;
+			hasCreditSignal = typeof message === "string" && BILLING_MESSAGE_PATTERN.test(message);
+		}
+	}
+	if (hasCreditSignal) {
 		return new SearchProviderError(provider, `${provider}: credits exhausted`, status);
 	}
 	if (status === 402) {

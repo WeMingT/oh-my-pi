@@ -70,8 +70,7 @@ const ACCOUNT_SCOPED_403_PATTERN =
 // 并发请求数已达上限 / 速率达到上限 (no 使用) must NOT match, or it would burn a
 // healthy sibling credential as a false quota. "速率限制" is absent for the
 // same reason.
-const CN_QUOTA_EXHAUSTED_PATTERN =
-	/使用.{0,30}?上限|(?:额度|配额)已?(?:用|耗)(?:完|尽)|(?:额度|配额|余额)不足|限额.{0,30}重置/;
+const CN_QUOTA_EXHAUSTED_PATTERN = /使用.{0,30}?上限|(?:额度|配额)已?(?:用|耗)(?:完|尽)|限额.{0,30}重置|余额不足/;
 // Simplified Chinese rate/concurrency caps can contain both 使用 and 上限, but
 // remain transient rather than account quota exhaustion.
 const CN_TRANSIENT_CAP_PATTERN =
@@ -310,88 +309,6 @@ const USAGE_LIMIT_PATTERN =
 export function isUsageLimitStatus(status: number | undefined): boolean {
 	return status === 429 || status === 402;
 }
-
-/**
- * Account-quota-specific text predicate for consumers that classify whole
- * provider error bodies (not pre-filtered retry text): accepts QUOTA /
- * G1-credits reasons only when the message carries a terminal account-cap
- * phrase — quota/usage/spend-limit tokens must co-occur with a
- * reached/exceeded/exhausted state (bare configuration or validation wording
- * like "usage limit configuration is invalid" stays raw), `credit(s)` must
- * sit in an exhaustion state phrase (a bare "Credit card …" is payment
- * context), balance/billing take the account-state shapes, Chinese
- * quota/balance exhaustion wording counts, and subscription caps require
- * their own exhaustion phrase (transient per-second/minute caps excluded).
- */
-const BILLING_ACCOUNT_STATE_PATTERN =
-	/\b(?:insufficient[ \t_-]+(?:credit[ \t_-]+)?balance|(?:balance|billing(?:[ \t]+account)?)(?:[ \t]+(?:is|was|are|were|has[ \t]+been))?[ \t]+(?:exhausted|exceeded|insufficient|suspended|overdue|past[ \t]+due))\b/i;
-
-// Bind a cap and its state through a small noun/verb grammar, never an
-// arbitrary text window. Both directions share cap/state vocabularies.
-const CAP_SEPARATOR_SOURCE = String.raw`[ \t_-]+`;
-const CAP_COPULA_SOURCE = String.raw`(?:[ \t]+(?:is|are|was|were|has|have|had|been)){0,3}`;
-const CAP_QUALIFIERS_SOURCE = String.raw`(?:[ \t]+(?:your|the|our|its|their|account|all|available|current|daily|weekly|monthly|annual|yearly)){0,3}`;
-// Reject non-word positions before scanning backwards for a negation.
-const CAP_START_SOURCE = String.raw`\b(?<!\b(?:not|never)[ \t]+(?:\w+[ \t]+){0,2})`;
-// Noun-first clauses only inherit an adjacent negation, not a prior cause
-// such as "could not complete because quota is exhausted".
-const CAP_SUBJECT_START_SOURCE = String.raw`\b(?<!\b(?:not|never)[ \t]+)`;
-const CAP_STATE_SOURCE = "(?:exhausted|exceeded|depleted|reached|hit|insufficient)";
-// Keep modal actions separate from noun-first states: available credits can
-// exceed a requested amount without the account being exhausted.
-const CAP_MODAL_EXCEED_SOURCE = String.raw`(?:would|will)[ \t]+exceed`;
-const CAP_SUBJECT_SOURCE = String.raw`(?:quota(?:[ \t_-]+limit)?|(?:usage|spend(?:ing)?)[ \t_-]?limit)`;
-const CREDIT_SUBJECT_SOURCE = String.raw`credits?(?:[ \t]+(?:account|balance)){0,2}`;
-const CREDIT_STATE_SOURCE = "(?:exhausted|exceeded|depleted|insufficient)";
-const SUBSCRIPTION_SOURCE = "(?:subscription|plan|membership)(?:'s)?";
-const SUBSCRIPTION_LIMIT_SOURCE = String.raw`(?:rate[ \t_-]?limits?|quota|cap)`;
-const SUBSCRIPTION_CAP_SOURCE =
-	String.raw`(?:${SUBSCRIPTION_SOURCE}${CAP_SEPARATOR_SOURCE}${SUBSCRIPTION_LIMIT_SOURCE}` +
-	String.raw`|${SUBSCRIPTION_LIMIT_SOURCE}${CAP_SEPARATOR_SOURCE}(?:for|of)${CAP_QUALIFIERS_SOURCE}${CAP_SEPARATOR_SOURCE}${SUBSCRIPTION_SOURCE})`;
-
-const ACCOUNT_QUOTA_WORDING_PATTERN = new RegExp(
-	String.raw`${CAP_SUBJECT_START_SOURCE}(?:${CAP_SUBJECT_SOURCE}${CAP_COPULA_SOURCE}${CAP_SEPARATOR_SOURCE}(?:${CAP_STATE_SOURCE}|will[ \t]+reset)` +
-		String.raw`|${CREDIT_SUBJECT_SOURCE}${CAP_COPULA_SOURCE}${CAP_SEPARATOR_SOURCE}${CREDIT_STATE_SOURCE})\b` +
-		String.raw`|${CAP_START_SOURCE}(?:(?:${CAP_STATE_SOURCE}|${CAP_MODAL_EXCEED_SOURCE})${CAP_QUALIFIERS_SOURCE}${CAP_SEPARATOR_SOURCE}${CAP_SUBJECT_SOURCE}` +
-		String.raw`|(?:${CREDIT_STATE_SOURCE}|${CAP_MODAL_EXCEED_SOURCE})${CAP_QUALIFIERS_SOURCE}${CAP_SEPARATOR_SOURCE}${CREDIT_SUBJECT_SOURCE}` +
-		String.raw`|(?:run[ \t]+out[ \t]+of|out[ \t]+of|no)[ \t]+credits?)\b`,
-	"i",
-);
-const SUBSCRIPTION_QUOTA_STATE_PATTERN = new RegExp(
-	String.raw`${CAP_SUBJECT_START_SOURCE}(?:${SUBSCRIPTION_CAP_SOURCE}${CAP_COPULA_SOURCE}${CAP_SEPARATOR_SOURCE}${CAP_STATE_SOURCE}` +
-		String.raw`|${SUBSCRIPTION_SOURCE}${CAP_COPULA_SOURCE}${CAP_SEPARATOR_SOURCE}(?:${CAP_STATE_SOURCE}|${CAP_MODAL_EXCEED_SOURCE})${CAP_QUALIFIERS_SOURCE}${CAP_SEPARATOR_SOURCE}${SUBSCRIPTION_LIMIT_SOURCE}` +
-		String.raw`|${SUBSCRIPTION_LIMIT_SOURCE}${CAP_COPULA_SOURCE}${CAP_SEPARATOR_SOURCE}${CAP_STATE_SOURCE}${CAP_SEPARATOR_SOURCE}(?:for|of)${CAP_QUALIFIERS_SOURCE}${CAP_SEPARATOR_SOURCE}${SUBSCRIPTION_SOURCE})\b` +
-		String.raw`|${CAP_START_SOURCE}(?:${CAP_STATE_SOURCE}|${CAP_MODAL_EXCEED_SOURCE})${CAP_QUALIFIERS_SOURCE}${CAP_SEPARATOR_SOURCE}${SUBSCRIPTION_CAP_SOURCE}\b`,
-	"i",
-);
-// The parenthesized quota hint distinguishes this resource error from a
-// bare transient status. The reason gate still gives rate-limit details priority.
-const RESOURCE_QUOTA_HINT_PATTERN = new RegExp(
-	String.raw`${CAP_SUBJECT_START_SOURCE}resource${CAP_COPULA_SOURCE}${CAP_SEPARATOR_SOURCE}exhausted[ \t]*\([ \t]*(?:e\.g\.[ \t]*)?check[ \t]+quota[ \t]*\)`,
-	"i",
-);
-// Affirmative Chinese quota-exhaustion phrases; the parser-level
-// CN_QUOTA_EXHAUSTED_PATTERN also carries bare 使用…上限 co-occurrence, which
-// alone is validation wording ("使用上限配置无效"), not exhaustion.
-const CN_TERMINAL_QUOTA_PATTERN =
-	/(?:额度|配额|余额)(?:已)?(?:用|耗)(?:完|尽)|(?:额度|配额|余额)不足|已经?达到?.{0,6}(?:上限|限额)/;
-
-export function isAccountQuotaExhaustedText(message: string): boolean {
-	// Balance/billing account-state phrases are self-contained diagnostics
-	// (they appear on non-rate-limit 4xx bodies), so they bypass the reason
-	// gate. All other arms require the parser to have already routed the
-	// body to QUOTA / G1-credits.
-	if (BILLING_ACCOUNT_STATE_PATTERN.test(message)) return true;
-	const reason = parseRateLimitReason(message);
-	if (reason !== "QUOTA_EXHAUSTED" && reason !== "INSUFFICIENT_G1_CREDITS_BALANCE") return false;
-	// The structured G1 credits-balance reason is authoritative on its own.
-	if (reason === "INSUFFICIENT_G1_CREDITS_BALANCE") return true;
-	if (matchesSubscriptionCapText(message) && SUBSCRIPTION_QUOTA_STATE_PATTERN.test(message)) return true;
-	if (CN_TERMINAL_QUOTA_PATTERN.test(message) && !CN_TRANSIENT_CAP_PATTERN.test(message)) return true;
-	// Qualifiers cannot cross clause boundaries or contain a negation.
-	// Reverse phrases also reject a negation immediately before the state.
-	return ACCOUNT_QUOTA_WORDING_PATTERN.test(message) || RESOURCE_QUOTA_HINT_PATTERN.test(message);
-}
 const STATUS_402_QUOTA_PATTERN =
 	/\b(?:payment(?:\s+is)?[-_.\s]*required|deactivated_workspace|insufficient.?balance)\b/i;
 
@@ -469,14 +386,10 @@ export function isOpaqueStatusBody(message: string): boolean {
 }
 
 /**
- * Flag-level text matcher for usage/quota-limit phrasing. `flags.ts` consumes
- * this to populate `Flag.UsageLimit` (via {@link isUsageLimit}), and
+ * Internal text matcher for usage/quota-limit phrasing. NOT part of the public
+ * API — callers classify through {@link import("./flags").isUsageLimit} (the
+ * flag accessor). `flags.ts` consumes this to populate `Flag.UsageLimit`, and
  * {@link isUsageLimitOutcome} uses it for the account-rotation decision.
- *
- * Note: this matcher accepts bare `resource_exhausted` (transient capacity),
- * so consumers that need the transient/quota distinction — e.g. the
- * coding-agent web-search error classifier — should use
- * {@link isAccountQuotaExhaustedText} instead.
  */
 export function matchesUsageLimitText(errorMessage: string): boolean {
 	const structuredReason = parseGoogleRpcRateLimitReason(errorMessage);
