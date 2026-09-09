@@ -29,6 +29,15 @@ describe("classifyProviderHttpError credit-signal coverage", () => {
 		expect(classifyProviderHttpError("xai", 429, "rate limited, retry later")).toBeNull();
 	});
 
+	it("stays linear on adversarial bodies instead of backtracking exponentially", () => {
+		// A balance/billing prefix followed by a long letter run with no
+		// terminal state word: a nested-quantifier pattern backtracks
+		// exponentially here (~seconds at 60 chars). Guards the linear
+		// character class in CREDIT_BODY_PATTERN.
+		const adversarial = `billing ${"a".repeat(60)}`;
+		expect(classifyProviderHttpError("xai", 400, adversarial)).toBeNull();
+	});
+
 	it("still maps bare 402/401/403 statuses when the body is silent", () => {
 		expect(classifyProviderHttpError("xai", 402, "")?.message).toContain("credits exhausted");
 		expect(classifyProviderHttpError("xai", 401, "")?.message).toContain("401 unauthorized");
