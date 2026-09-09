@@ -309,6 +309,21 @@ const USAGE_LIMIT_PATTERN =
 export function isUsageLimitStatus(status: number | undefined): boolean {
 	return status === 429 || status === 402;
 }
+
+/**
+ * Account-quota-specific text predicate for consumers that classify whole
+ * provider error bodies (not pre-filtered retry text): accepts QUOTA /
+ * G1-credits reasons only when the message carries quota-account wording
+ * (quota, credits, spend limit, usage limit, CN quota phrases), so the reason
+ * parser's generic bare-`exhausted` branch ("retry attempts exhausted",
+ * "connection pool exhausted") does not mislabel infrastructure failures.
+ */
+const ACCOUNT_QUOTA_WORDING_PATTERN = /quota|credits?|spend[a-z]*[-_ ]?limit|usage.?limit|额度|配额/i;
+export function isAccountQuotaExhaustedText(message: string): boolean {
+	const reason = parseRateLimitReason(message);
+	if (reason !== "QUOTA_EXHAUSTED" && reason !== "INSUFFICIENT_G1_CREDITS_BALANCE") return false;
+	return ACCOUNT_QUOTA_WORDING_PATTERN.test(message);
+}
 const STATUS_402_QUOTA_PATTERN =
 	/\b(?:payment(?:\s+is)?[-_.\s]*required|deactivated_workspace|insufficient.?balance)\b/i;
 

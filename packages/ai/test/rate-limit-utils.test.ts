@@ -4,6 +4,7 @@ import { classify, Flag, is, isUsageLimit, retriable } from "@oh-my-pi/pi-ai/err
 import {
 	calculateRateLimitBackoffMs,
 	is402BillingCapBody,
+	isAccountQuotaExhaustedText,
 	isConcurrencyCapExclusion,
 	isOpaqueStatusBody,
 	isUsageLimitOutcome,
@@ -288,6 +289,24 @@ describe("parseRateLimitReason", () => {
 		const body = "Cloud Code Assist API error (429): Too many requests";
 		expect(parseRateLimitReason(body)).toBe("RATE_LIMIT_EXCEEDED");
 		expect(isUsageLimitOutcome(429, body)).toBe(false);
+	});
+});
+
+describe("isAccountQuotaExhaustedText", () => {
+	it("accepts quota-keyed exhaustion wording", () => {
+		expect(isAccountQuotaExhaustedText("insufficient_quota")).toBe(true);
+		expect(isAccountQuotaExhaustedText("quota exceeded")).toBe(true);
+		expect(isAccountQuotaExhaustedText("usage limit reached")).toBe(true);
+		expect(isAccountQuotaExhaustedText("配额已耗尽")).toBe(true);
+	});
+
+	it("rejects infrastructure exhaustion phrasing", () => {
+		// parseRateLimitReason's generic branch maps these to QUOTA_EXHAUSTED;
+		// whole-body consumers (web-search provider classification) must not
+		// treat them as account quota failures.
+		expect(isAccountQuotaExhaustedText("retry attempts exhausted")).toBe(false);
+		expect(isAccountQuotaExhaustedText("connection pool exhausted")).toBe(false);
+		expect(isAccountQuotaExhaustedText("resource_exhausted")).toBe(false);
 	});
 });
 

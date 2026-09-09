@@ -62,6 +62,19 @@ describe("classifyProviderHttpError credit-signal coverage", () => {
 		expect(classifyProviderHttpError("xai", 429, "resource exhausted")).toBeNull();
 	});
 
+	it("does not relabel unrelated exhaustion phrases as credits", () => {
+		// parseRateLimitReason's generic branch matches every "exhausted"
+		// occurrence, which suits chat-retry text but mislabels infrastructure
+		// failures on raw provider bodies; only account-quota wording (backed
+		// by quota/credits/spend/limit tokens) may map to credits exhausted.
+		expect(classifyProviderHttpError("firecrawl", 500, "retry attempts exhausted")).toBeNull();
+		expect(classifyProviderHttpError("brave", 500, "connection pool exhausted")).toBeNull();
+		expect(classifyProviderHttpError("kagi", 500, "timeout budget exhausted")).toBeNull();
+		// Quota-backed exhaustion still maps.
+		expect(classifyProviderHttpError("xai", 429, "quota exceeded")?.message).toContain("credits exhausted");
+		expect(classifyProviderHttpError("xai", 429, "usage limit reached")?.message).toContain("credits exhausted");
+	});
+
 	it("keeps the credits diagnosis when formatting auth-status billing failures", () => {
 		// 403 bodies classified as billing exhaustion must not be rewritten to
 		// the generic "authorization failed" summary: the user-facing fallback
