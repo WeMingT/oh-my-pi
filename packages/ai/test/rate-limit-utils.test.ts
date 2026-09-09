@@ -344,8 +344,17 @@ describe("isAccountQuotaExhaustedText", () => {
 		expect(isAccountQuotaExhaustedText("usage limit has not been reached")).toBe(false);
 		expect(isAccountQuotaExhaustedText("spending limit was not exceeded")).toBe(false);
 		expect(isAccountQuotaExhaustedText("you have not exceeded your quota")).toBe(false);
-		// An affirmative state elsewhere in the body still counts.
-		expect(isAccountQuotaExhaustedText("characters not written, quota exceeded")).toBe(true);
+		// An unrelated affirmative state elsewhere must not rescue a negated
+		// quota phrase.
+		expect(isAccountQuotaExhaustedText("usage limit has not been reached; retry attempts exhausted")).toBe(false);
+		// An affirmative state attached to the quota phrase still counts.
+		expect(isAccountQuotaExhaustedText("quota exceeded")).toBe(true);
+	});
+
+	it("accepts reached as a copula terminal state", () => {
+		expect(isAccountQuotaExhaustedText("Your quota has been reached")).toBe(true);
+		expect(isAccountQuotaExhaustedText("You have reached your quota")).toBe(true);
+		expect(isAccountQuotaExhaustedText("usage limit has been reached")).toBe(true);
 	});
 
 	it("rejects infrastructure exhaustion phrasing", () => {

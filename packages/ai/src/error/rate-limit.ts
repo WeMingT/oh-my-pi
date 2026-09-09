@@ -343,8 +343,13 @@ function hasAffirmativeTerminalState(message: string): boolean {
 	return false;
 }
 
+// Reverse arms (state word first, e.g. "exceeded your quota") must reject an
+// immediately preceding negation ("you have not exceeded your quota"); the
+// forward arms already exclude negations because their connector sets do not
+// contain not/never.
+const NEGATED_BEFORE = /(?<!\b(?:not|never)\s)/;
 const ACCOUNT_QUOTA_WORDING_PATTERN =
-	/(?:insufficient|exceeded|exhausted|depleted)[_ ]?quota|quota[_ ]?(?:exceeded|reached|exhausted|insufficient|depleted)|\bquota\b(?:\s+(?:is|are|was|were|has|have|had|been|your|the|account)){0,3}[\s-]{0,3}(?:exhausted|exceeded|depleted)\b|\b(?:exhausted|exceeded|depleted)\b(?:\s+(?:your|the|account|its|their)){0,3}[\s-]{0,3}quota\b|quota.{0,40}will reset|usage.?limit[_ ]?reached|\b(?:usage.?limit|spend[a-z]*[-_ ]?limit)\b.{0,40}\b(?:reached|exceeded|exhausted|hit)\b|\b(?:reached|exceeded|exhausted)\b.{0,40}\b(?:usage.?limit|spend[a-z]*[-_ ]?limit)\b|\b(?:run out of|out of|no)\s+credits?\b|\bcredits?\b(?:\s+(?:is|are|was|were|have|has|been|account|balance)){0,3}[\s-]{0,3}(?:exhausted|depleted|insufficient|exceeded)\b|\b(?:insufficient|exhausted|depleted|exceeded)\b(?:\s+(?:your|the|all|available|account|balance)){0,2}[\s-]{0,3}credits?\b/i;
+	/(?:insufficient|exceeded|exhausted|depleted)[_ ]?quota|quota[_ ]?(?:exceeded|reached|exhausted|insufficient|depleted)|\bquota\b(?:\s+(?:is|are|was|were|has|have|had|been|your|the|account)){0,3}[\s-]{0,3}(?:exhausted|exceeded|depleted|reached)\b|(?<!\b(?:not|never)\s)\b(?:exhausted|exceeded|depleted|reached)\b(?:\s+(?:your|the|account|its|their)){0,3}[\s-]{0,3}quota\b|quota.{0,40}will reset|usage.?limit[_ ]?reached|\b(?:usage.?limit|spend[a-z]*[-_ ]?limit)\b(?:\s+(?:has|have|had|been|was|were|is|are|your|the|account|our)){0,3}\s+(?:reached|exceeded|exhausted|hit)\b|(?<!\b(?:not|never)\s)\b(?:reached|exceeded|exhausted)\b(?:\s+(?:your|the|our|account)){0,3}\s+(?:usage.?limit|spend[a-z]*[-_ ]?limit)\b|\b(?:run out of|out of|no)\s+credits?\b|\bcredits?\b(?:\s+(?:is|are|was|were|have|has|been|account|balance)){0,3}[\s-]{0,3}(?:exhausted|depleted|insufficient|exceeded)\b|(?<!\b(?:not|never)\s)\b(?:insufficient|exhausted|depleted|exceeded)\b(?:\s+(?:your|the|all|available|account|balance)){0,2}[\s-]{0,3}credits?\b/i;
 export function isAccountQuotaExhaustedText(message: string): boolean {
 	// Balance/billing account-state phrases are self-contained diagnostics
 	// (they appear on non-rate-limit 4xx bodies), so they bypass the reason
@@ -361,11 +366,10 @@ export function isAccountQuotaExhaustedText(message: string): boolean {
 	// must stay raw.
 	if (matchesSubscriptionCapText(message) && hasAffirmativeTerminalState(message)) return true;
 	if (CN_QUOTA_EXHAUSTED_PATTERN.test(message) && !CN_TRANSIENT_CAP_PATTERN.test(message)) return true;
-	// Co-occurrence arms must land on an affirmative terminal state — a
-	// bounded window can cross a negation ("usage limit has not been
-	// reached"), and the reverse arms start after one ("you have not
-	// exceeded your quota").
-	return ACCOUNT_QUOTA_WORDING_PATTERN.test(message) && hasAffirmativeTerminalState(message);
+	// The wording arms are phrase-level: connector sets exclude negations and
+	// the reverse arms look them up directly, so an unrelated affirmative
+	// state elsewhere in the body cannot satisfy a negated quota phrase.
+	return ACCOUNT_QUOTA_WORDING_PATTERN.test(message);
 }
 const STATUS_402_QUOTA_PATTERN =
 	/\b(?:payment(?:\s+is)?[-_.\s]*required|deactivated_workspace|insufficient.?balance)\b/i;
