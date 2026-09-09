@@ -1,4 +1,5 @@
 import { type ApiKey, type ApiKeyResolver, type AuthStorage, withAuth } from "@oh-my-pi/pi-ai";
+import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
 import { DEFAULT_MODEL_PER_PROVIDER } from "@oh-my-pi/pi-catalog/provider-models/descriptors";
 import { $env } from "@oh-my-pi/pi-utils";
 import {
@@ -30,10 +31,7 @@ function resolveXAIWebSearchModel(configuredModel: string | undefined): string {
 	const model = configuredModel?.trim();
 	return model || XAI_WEB_SEARCH_MODEL;
 }
-// grok-4.5 defaults reasoning.effort to "high"; xAI documents "low" for
-// latency-sensitive agentic use and simple tool calling
-// (docs.x.ai/developers/model-capabilities/text/reasoning). Web search is
-// latency-sensitive, so pin these calls low regardless of their configured timeout.
+// Keep search latency low when the selected model supports an effort dial.
 const XAI_WEB_SEARCH_REASONING_EFFORT = "low";
 const DEFAULT_NUM_RESULTS = 10;
 const MAX_NUM_RESULTS = 30;
@@ -122,7 +120,7 @@ function domainFilterList(sites: readonly string[]): string[] {
 	return [...hosts];
 }
 
-function buildRequestBody(params: SearchParams): Record<string, unknown> {
+function buildRequestBody(params: SearchParams, modelId: string, provider: XAIHttpProvider): Record<string, unknown> {
 	const parsed = params.parsedQuery ?? parseSearchQuery(params.query);
 	const webSearchTool: Record<string, unknown> = { type: "web_search" };
 	let query = params.query;
@@ -138,14 +136,23 @@ function buildRequestBody(params: SearchParams): Record<string, unknown> {
 	}
 
 	const body: Record<string, unknown> = {
-		model: resolveXAIWebSearchModel(params.xaiModel),
+		model: modelId,
 		input: [
 			{ role: "system", content: params.systemPrompt },
 			{ role: "user", content: query },
 		],
 		tools: [webSearchTool],
-		reasoning: { effort: XAI_WEB_SEARCH_REASONING_EFFORT },
 	};
+	const model = params.modelRegistry?.find(provider, modelId) ?? getBundledModel("xai", modelId);
+	const compat = model?.compat;
+	if (
+		compat &&
+		"supportsReasoningEffort" in compat &&
+		compat.supportsReasoningEffort &&
+		!("omitReasoningEffort" in compat && compat.omitReasoningEffort)
+	) {
+		body.reasoning = { effort: XAI_WEB_SEARCH_REASONING_EFFORT };
+	}
 
 	if (params.maxOutputTokens !== undefined) {
 		body.max_output_tokens = params.maxOutputTokens;
@@ -184,9 +191,9 @@ function throwXAIResponsesError(status: number, errorText: string): never {
 async function callXAIResponses(
 	apiKey: string,
 	params: SearchParams,
+	requestBody: Record<string, unknown>,
 	transport: XAIHttpTransport,
 ): Promise<XAIResponsesResponse> {
-	const requestBody = buildRequestBody(params);
 	const response = await postXAIResponses(apiKey, params, requestBody, transport);
 
 	if (!response.ok) {
@@ -428,9 +435,16 @@ export async function searchXAI(params: SearchParams): Promise<SearchResponse> {
 	// Registry-less callers (SDK custom-tool embedding without one, direct
 	// searchXAI callers) share the resolver: its env/default legs apply.
 	const preferredProvider: XAIHttpProvider = shouldPreferXAIOAuth(params.authStorage) ? "xai-oauth" : "xai";
-	const transport: XAIHttpTransport = resolveXAIHttpTransport(params.modelRegistry, preferredProvider, modelId);
+	const preferredTransport = resolveXAIHttpTransport(params.modelRegistry, preferredProvider, modelId);
+	const auth = resolveXAIWebSearchAuth(
+		params,
+		preferredTransport.baseURL.replace(/\/+$/, "") !== XAI_DEFAULT_BASE_URL,
+	);
+	const transport =
+		auth.provider === preferredProvider
+			? preferredTransport
+			: resolveXAIHttpTransport(params.modelRegistry, auth.provider, modelId);
 	const customEndpoint = transport.baseURL.replace(/\/+$/, "") !== XAI_DEFAULT_BASE_URL;
-	const auth = resolveXAIWebSearchAuth(params, customEndpoint);
 	const credentialOrigin = params.authStorage.getCredentialOrigin(auth.provider);
 	if (
 		customEndpoint &&
@@ -447,10 +461,15 @@ export async function searchXAI(params: SearchParams): Promise<SearchResponse> {
 		: auth.keyOrResolver;
 
 	const resultCap = clampNumResults(params.numSearchResults ?? params.limit, DEFAULT_NUM_RESULTS, MAX_NUM_RESULTS);
-	const response = await withAuth(keyOrResolver, (key: string) => callXAIResponses(key, params, transport), {
-		signal: params.signal,
-		missingKeyMessage: 'xAI credentials not found. Set XAI_API_KEY or configure an API key for provider "xai".',
-	});
+	const requestBody = buildRequestBody(params, modelId, auth.provider);
+	const response = await withAuth(
+		keyOrResolver,
+		(key: string) => callXAIResponses(key, params, requestBody, transport),
+		{
+			signal: params.signal,
+			missingKeyMessage: 'xAI credentials not found. Set XAI_API_KEY or configure an API key for provider "xai".',
+		},
+	);
 	const parsed = parseResponse(response, resultCap);
 	if (!parsed.answer && parsed.sources.length === 0) {
 		throw new SearchProviderError("xai", "xAI web_search returned no answer or sources", 502);

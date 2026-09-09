@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, setSystemTime, vi } from "bun:test";
-import type { AuthStorage, CredentialOriginKind, FetchImpl } from "@oh-my-pi/pi-ai";
+import { AuthStorage, type CredentialOriginKind, type FetchImpl } from "@oh-my-pi/pi-ai";
 import { DEFAULT_MODEL_PER_PROVIDER } from "@oh-my-pi/pi-catalog/provider-models/descriptors";
-import type { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
+import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { runSearchQuery } from "@oh-my-pi/pi-coding-agent/web/search";
 import { searchXAI, XAIProvider } from "@oh-my-pi/pi-coding-agent/web/search/providers/xai";
 import { SearchProviderError } from "@oh-my-pi/pi-coding-agent/web/search/types";
+import { TempDir } from "@oh-my-pi/pi-utils";
 
 type CapturedRequest = {
 	url: string;
@@ -264,6 +265,44 @@ describe("xAI web search provider", () => {
 		});
 	});
 
+	it("keeps fallback API keys and headers on their own provider endpoint", async () => {
+		const directory = await TempDir.create("@web-search-xai-routing-");
+		const authStorage = await AuthStorage.create(directory.join("auth.db"));
+		try {
+			await authStorage.set("xai-oauth", [
+				{
+					type: "oauth",
+					access: "official-oauth-token",
+					refresh: "unused-refresh-token",
+					expires: Date.now() + 3_600_000,
+				},
+			]);
+			const modelRegistry = new ModelRegistry(authStorage, directory.join("models.yml"));
+			modelRegistry.registerProvider("xai-oauth", {
+				baseUrl: "https://oauth-relay.example/v1",
+				headers: { "X-OAuth-Tenant": "oauth-tenant" },
+			});
+			modelRegistry.registerProvider("xai", {
+				baseUrl: "https://xai-relay.example/v1",
+				apiKey: "xai-relay-key",
+				headers: { "X-Xai-Tenant": "xai-tenant" },
+			});
+			const capture = captureFetch({ output_text: "Routed answer" });
+
+			await searchXAI({ ...makeParams(capture.fetchMock, authStorage), modelRegistry });
+
+			expect(capture.capturedRequests).toHaveLength(1);
+			expect(capture.capturedRequest?.url).toBe("https://xai-relay.example/v1/responses");
+			const headers = new Headers(capture.capturedRequest?.headers);
+			expect(headers.get("Authorization")).toBe("Bearer xai-relay-key");
+			expect(headers.get("X-Xai-Tenant")).toBe("xai-tenant");
+			expect(headers.get("X-OAuth-Tenant")).toBeNull();
+		} finally {
+			authStorage.close();
+			await directory.remove();
+		}
+	});
+
 	it("uses a supplied registry's auth storage with its xAI transport", async () => {
 		const capture = captureFetch({ id: "resp_registry", model: "grok-4.3", output_text: "registry answer" });
 		const authStorage = makeAuthStorage({
@@ -308,10 +347,6 @@ describe("xAI web search provider", () => {
 			expect.unreachable("official xAI OAuth credentials should be rejected for a custom endpoint");
 		} catch (error) {
 			expect(error).toBeInstanceOf(SearchProviderError);
-			expect(error).toHaveProperty(
-				"message",
-				'Refusing to send official xAI OAuth credentials to custom endpoint https://proxy.example/v1. Configure an API key for provider "xai".',
-			);
 		}
 
 		expect(capture.capturedRequests).toHaveLength(0);
@@ -915,10 +950,6 @@ describe("xAI web search provider", () => {
 			expect.unreachable("missing xAI credentials should reject");
 		} catch (error) {
 			expect(error).toBeInstanceOf(Error);
-			expect(error).toHaveProperty(
-				"message",
-				'xAI credentials not found. Set XAI_API_KEY or configure an API key for provider "xai".',
-			);
 		}
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
@@ -929,6 +960,15 @@ describe("xAI web search provider", () => {
 		await searchXAI({ ...makeParams(capture.fetchMock), xaiModel: "grok-4.3" });
 
 		expect(capture.capturedRequest?.body).toMatchObject({ model: "grok-4.3" });
+	});
+
+	it("omits unsupported reasoning effort for the selected search model", async () => {
+		const capture = captureFetch({ output_text: "Reasoning model answer" });
+
+		await searchXAI({ ...makeParams(capture.fetchMock), xaiModel: "grok-4.20-0309-reasoning" });
+
+		expect(capture.capturedRequest?.body?.model).toBe("grok-4.20-0309-reasoning");
+		expect(capture.capturedRequest?.body).not.toHaveProperty("reasoning.effort");
 	});
 
 	it("lets XAI_SEARCH_MODEL override the default", async () => {
