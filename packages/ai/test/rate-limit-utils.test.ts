@@ -340,18 +340,40 @@ describe("isAccountQuotaExhaustedText", () => {
 		expect(isAccountQuotaExhaustedText("spending limit must be positive")).toBe(false);
 	});
 
+	it("rejects negated terminal states", () => {
+		expect(isAccountQuotaExhaustedText("usage limit has not been reached")).toBe(false);
+		expect(isAccountQuotaExhaustedText("spending limit was not exceeded")).toBe(false);
+		expect(isAccountQuotaExhaustedText("you have not exceeded your quota")).toBe(false);
+		// An affirmative state elsewhere in the body still counts.
+		expect(isAccountQuotaExhaustedText("characters not written, quota exceeded")).toBe(true);
+	});
+
 	it("rejects infrastructure exhaustion phrasing", () => {
 		// parseRateLimitReason's generic branch maps these to QUOTA_EXHAUSTED;
 		// whole-body consumers (web-search provider classification) must not
 		// treat them as account quota failures.
 		expect(isAccountQuotaExhaustedText("retry attempts exhausted")).toBe(false);
 		expect(isAccountQuotaExhaustedText("connection pool exhausted")).toBe(false);
+		// pi-ai routes the literal gRPC status phrases to transient
+		// MODEL_CAPACITY (regression #7032); the predicate must not re-enter
+		// through the wording layer.
+		expect(isAccountQuotaExhaustedText("resource exhausted")).toBe(false);
 		expect(isAccountQuotaExhaustedText("resource_exhausted")).toBe(false);
+		expect(isAccountQuotaExhaustedText("Connect error resource_exhausted: Error")).toBe(false);
 		// A bare `credit` token in a payment/infrastructure context must not
 		// pass the credits-proximity arm.
 		expect(isAccountQuotaExhaustedText("Credit card processing retries exhausted")).toBe(false);
 		expect(isAccountQuotaExhaustedText("credit card charged, retries exhausted")).toBe(false);
 		expect(isAccountQuotaExhaustedText("credit card processing exceeded retry deadline")).toBe(false);
+	});
+
+	it("stays linear on bodies stuffed with repeated billing tokens", () => {
+		// Repeated prefixes formerly retried the rest of the body at each
+		// position. A generous ceiling detects that multi-second stall.
+		const adversarial = "billing ".repeat(10 * 1024);
+		const started = performance.now();
+		expect(isAccountQuotaExhaustedText(adversarial)).toBe(false);
+		expect(performance.now() - started).toBeLessThan(1000);
 	});
 });
 
