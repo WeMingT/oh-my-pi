@@ -325,8 +325,9 @@ export function isUsageLimitStatus(status: number | undefined): boolean {
  */
 const BILLING_ACCOUNT_STATE_PATTERN =
 	/\b(?:balance|billing(?:[ \t]+account)?)(?:[ \t]+(?:is|was|are|were|has[ \t]+been))?[ \t]+(?:exhausted|exceeded|insufficient|suspended|overdue|past[ \t]+due)\b/i;
+const ACCOUNT_CAP_STATE_PATTERN = /\b(?:reached|exceeded|exhausted|depleted|hit|insufficient)\b/i;
 const ACCOUNT_QUOTA_WORDING_PATTERN =
-	/(?:insufficient|exceeded|exhausted|depleted)[_ ]?quota|quota[_ ]?(?:exceeded|reached|exhausted|insufficient|depleted)|quota.{0,40}will reset|usage.?limit[_ ]?reached|\b(?:usage.?limit|spend[a-z]*[-_ ]?limit)\b.{0,40}\b(?:reached|exceeded|exhausted|hit)\b|\b(?:reached|exceeded|exhausted)\b.{0,40}\b(?:usage.?limit|spend[a-z]*[-_ ]?limit)\b|\b(?:run out of|out of|no)\s+credits?\b|\bcredits?\b(?:\s+(?:is|are|was|were|have|has|been|account|balance)){0,3}[\s-]{0,3}(?:exhausted|depleted|insufficient|exceeded)\b|\b(?:insufficient|exhausted|depleted|exceeded)\b(?:\s+(?:your|the|all|available|account|balance)){0,2}[\s-]{0,3}credits?\b/i;
+	/(?:insufficient|exceeded|exhausted|depleted)[_ ]?quota|quota[_ ]?(?:exceeded|reached|exhausted|insufficient|depleted)|\bquota\b(?:\s+(?:is|are|was|were|has|have|had|been|your|the|account)){0,3}[\s-]{0,3}(?:exhausted|exceeded|depleted)\b|\b(?:exhausted|exceeded|depleted)\b(?:\s+(?:your|the|account|its|their)){0,3}[\s-]{0,3}quota\b|quota.{0,40}will reset|usage.?limit[_ ]?reached|\b(?:usage.?limit|spend[a-z]*[-_ ]?limit)\b.{0,40}\b(?:reached|exceeded|exhausted|hit)\b|\b(?:reached|exceeded|exhausted)\b.{0,40}\b(?:usage.?limit|spend[a-z]*[-_ ]?limit)\b|\b(?:run out of|out of|no)\s+credits?\b|\bcredits?\b(?:\s+(?:is|are|was|were|have|has|been|account|balance)){0,3}[\s-]{0,3}(?:exhausted|depleted|insufficient|exceeded)\b|\b(?:insufficient|exhausted|depleted|exceeded)\b(?:\s+(?:your|the|all|available|account|balance)){0,2}[\s-]{0,3}credits?\b/i;
 export function isAccountQuotaExhaustedText(message: string): boolean {
 	// Balance/billing account-state phrases are self-contained diagnostics
 	// (they appear on non-rate-limit 4xx bodies), so they bypass the reason
@@ -335,7 +336,10 @@ export function isAccountQuotaExhaustedText(message: string): boolean {
 	if (BILLING_ACCOUNT_STATE_PATTERN.test(message)) return true;
 	const reason = parseRateLimitReason(message);
 	if (reason !== "QUOTA_EXHAUSTED" && reason !== "INSUFFICIENT_G1_CREDITS_BALANCE") return false;
-	if (matchesSubscriptionCapText(message)) return true;
+	// Subscription-cap evidence still needs a terminal state: bare
+	// subscription-metadata validation ("subscription plan cap must be
+	// positive") must stay raw.
+	if (matchesSubscriptionCapText(message) && ACCOUNT_CAP_STATE_PATTERN.test(message)) return true;
 	if (CN_QUOTA_EXHAUSTED_PATTERN.test(message) && !CN_TRANSIENT_CAP_PATTERN.test(message)) return true;
 	return ACCOUNT_QUOTA_WORDING_PATTERN.test(message);
 }

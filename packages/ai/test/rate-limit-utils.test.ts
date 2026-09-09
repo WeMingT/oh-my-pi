@@ -296,6 +296,8 @@ describe("isAccountQuotaExhaustedText", () => {
 	it("accepts quota-keyed exhaustion wording", () => {
 		expect(isAccountQuotaExhaustedText("insufficient_quota")).toBe(true);
 		expect(isAccountQuotaExhaustedText("quota exceeded")).toBe(true);
+		expect(isAccountQuotaExhaustedText("quota has been exhausted")).toBe(true);
+		expect(isAccountQuotaExhaustedText("you have exceeded your quota")).toBe(true);
 		expect(isAccountQuotaExhaustedText("usage limit reached")).toBe(true);
 		expect(isAccountQuotaExhaustedText("配额已耗尽")).toBe(true);
 		expect(isAccountQuotaExhaustedText("run out of credits")).toBe(true);
@@ -307,9 +309,11 @@ describe("isAccountQuotaExhaustedText", () => {
 	it("accepts subscription-cap phrasing the reason parser routes to quota", () => {
 		expect(isAccountQuotaExhaustedText("Your subscription has reached its rate limit")).toBe(true);
 		expect(isAccountQuotaExhaustedText("monthly plan cap exceeded")).toBe(true);
-		// Transient per-minute caps keep the subscription matcher's exclusion.
+		// Transient per-minute caps keep the subscription matcher's exclusion,
+		// and subscription-metadata validation stays raw.
 		expect(isAccountQuotaExhaustedText("subscription rate limit per minute")).toBe(false);
 		expect(isAccountQuotaExhaustedText("Your limit will reset in 30 seconds")).toBe(false);
+		expect(isAccountQuotaExhaustedText("subscription plan cap must be positive")).toBe(false);
 	});
 
 	it("accepts balance/billing account-state phrases without a rate-limit reason", () => {

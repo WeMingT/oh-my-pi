@@ -11,8 +11,8 @@ describe("classifyProviderHttpError credit-signal coverage", () => {
 		["Your credit balance has been exhausted", 400],
 		["billing is overdue", 400],
 		["账户额度已用尽", 429],
-		["Your subscription has reached its rate limit", 429],
-		["monthly plan cap exceeded", 429],
+		["quota has been exhausted", 429],
+		["you have exceeded your quota", 429],
 	])("maps %s (%d) to a credits-exhausted error", (body, status) => {
 		const error = classifyProviderHttpError("xai", status, body);
 		expect(error).not.toBeNull();
@@ -36,6 +36,7 @@ describe("classifyProviderHttpError credit-signal coverage", () => {
 		// terminal account-cap state.
 		expect(classifyProviderHttpError("xai", 400, "usage limit configuration is invalid")).toBeNull();
 		expect(classifyProviderHttpError("xai", 400, "spending limit must be positive")).toBeNull();
+		expect(classifyProviderHttpError("xai", 400, "subscription plan cap must be positive")).toBeNull();
 	});
 
 	it("stays linear on bodies stuffed with repeated billing tokens", () => {
