@@ -1,4 +1,4 @@
-import { matchesUsageLimitText } from "@oh-my-pi/pi-ai";
+import { parseRateLimitReason } from "@oh-my-pi/pi-ai";
 import type { AgentStorage } from "../../../session/agent-storage";
 import {
 	DEFAULT_WEB_SEARCH_TIMEOUT_SECONDS,
@@ -119,9 +119,12 @@ export function classifyProviderHttpError(
 	status: number,
 	body: string,
 ): SearchProviderError | null {
-	// Reuse quota/spend/subscription classification, including Chinese quota
-	// wording and its transient-rate-limit exclusions.
-	if (CREDIT_BODY_PATTERN.test(body) || matchesUsageLimitText(body)) {
+	// Reuse pi-ai's reason-level classification (quota/spend/subscription caps,
+	// Chinese quota wording) rather than the flag-level usage-limit matcher:
+	// bare resource_exhausted bodies are deliberately transient
+	// MODEL_CAPACITY there and must not be relabeled as exhausted credits.
+	const reason = parseRateLimitReason(body);
+	if (CREDIT_BODY_PATTERN.test(body) || reason === "QUOTA_EXHAUSTED" || reason === "INSUFFICIENT_G1_CREDITS_BALANCE") {
 		return new SearchProviderError(provider, `${provider}: credits exhausted`, status);
 	}
 	if (status === 402) {

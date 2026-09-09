@@ -52,6 +52,16 @@ describe("classifyProviderHttpError credit-signal coverage", () => {
 		expect(classifyProviderHttpError("xai", 429, "速率达到上限，请稍后重试")).toBeNull();
 	});
 
+	it("does not relabel transient resource-exhausted failures as credits", () => {
+		// pi-ai deliberately classifies bare resource_exhausted (space and
+		// Connect underscore forms) as transient MODEL_CAPACITY with its own
+		// backoff (regression #7032); the flag-level usage-limit matcher also
+		// matches it, so classification here must use the reason level.
+		expect(classifyProviderHttpError("xai", 429, "resource_exhausted")).toBeNull();
+		expect(classifyProviderHttpError("xai", 429, "Connect error resource_exhausted: Error")).toBeNull();
+		expect(classifyProviderHttpError("xai", 429, "resource exhausted")).toBeNull();
+	});
+
 	it("keeps the credits diagnosis when formatting auth-status billing failures", () => {
 		// 403 bodies classified as billing exhaustion must not be rewritten to
 		// the generic "authorization failed" summary: the user-facing fallback
