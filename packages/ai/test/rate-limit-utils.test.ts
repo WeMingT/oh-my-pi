@@ -344,11 +344,29 @@ describe("isAccountQuotaExhaustedText", () => {
 		expect(isAccountQuotaExhaustedText("usage limit has not been reached")).toBe(false);
 		expect(isAccountQuotaExhaustedText("spending limit was not exceeded")).toBe(false);
 		expect(isAccountQuotaExhaustedText("you have not exceeded your quota")).toBe(false);
+		// Adverb-separated negations are still negations.
+		expect(isAccountQuotaExhaustedText("we have never actually exceeded the quota")).toBe(false);
+		expect(isAccountQuotaExhaustedText("we have not yet reached your quota")).toBe(false);
 		// An unrelated affirmative state elsewhere must not rescue a negated
-		// quota phrase.
+		// quota or subscription phrase.
 		expect(isAccountQuotaExhaustedText("usage limit has not been reached; retry attempts exhausted")).toBe(false);
-		// An affirmative state attached to the quota phrase still counts.
+		expect(isAccountQuotaExhaustedText("subscription cap has not been reached; retry attempts exhausted")).toBe(
+			false,
+		);
+		// An affirmative state attached to the quota phrase still counts —
+		// punctuation breaks a negation chain, so "not written, quota" does
+		// not negate "exceeded".
+		expect(isAccountQuotaExhaustedText("characters not written, quota exceeded")).toBe(true);
 		expect(isAccountQuotaExhaustedText("quota exceeded")).toBe(true);
+	});
+
+	it("requires an affirmative state on Chinese usage-limit bodies", () => {
+		expect(isAccountQuotaExhaustedText("使用上限配置无效")).toBe(false);
+		expect(isAccountQuotaExhaustedText("API 使用上限必须为正数")).toBe(false);
+		expect(isAccountQuotaExhaustedText("尚未达到使用上限")).toBe(false);
+		// Affirmative exhaustion still maps.
+		expect(isAccountQuotaExhaustedText("配额已耗尽")).toBe(true);
+		expect(isAccountQuotaExhaustedText("已达使用上限")).toBe(true);
 	});
 
 	it("accepts reached as a copula terminal state", () => {

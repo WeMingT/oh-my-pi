@@ -331,25 +331,34 @@ const BILLING_ACCOUNT_STATE_PATTERN =
 // reached") can be told apart from affirmative uses.
 const TERMINAL_STATE_PATTERN =
 	/reached|exceeded|exhausted|depleted|hit|insufficient|will\s+reset|run\s+out\s+of|(?:out\s+of|no)\s+credits/gi;
-const NEGATION_BEFORE_PATTERN = /\b(?:not|never)\b|n['’]t\s?$/i;
+// A negation chained to the state word through at most two unpunctuated
+// words ("has not been reached", "never actually exceeded"). Punctuation
+// breaks the chain ("not written, quota exceeded" stays affirmative).
+const NEGATION_CHAIN_PATTERN = /\b(?:not|never)\b(?:\s+\w+){0,2}\s*$/i;
 
-/** True when at least one terminal state word appears un-negated. */
-function hasAffirmativeTerminalState(message: string): boolean {
+/** True when a terminal state sits un-negated inside `window`. */
+function windowHasAffirmativeState(window: string): boolean {
 	TERMINAL_STATE_PATTERN.lastIndex = 0;
-	for (let m = TERMINAL_STATE_PATTERN.exec(message); m !== null; m = TERMINAL_STATE_PATTERN.exec(message)) {
-		const before = message.slice(Math.max(0, m.index - 12), m.index);
-		if (!NEGATION_BEFORE_PATTERN.test(before)) return true;
+	for (let m = TERMINAL_STATE_PATTERN.exec(window); m !== null; m = TERMINAL_STATE_PATTERN.exec(window)) {
+		const before = window.slice(0, m.index);
+		if (!NEGATION_CHAIN_PATTERN.test(before)) return true;
 	}
 	return false;
 }
 
-// Reverse arms (state word first, e.g. "exceeded your quota") must reject an
-// immediately preceding negation ("you have not exceeded your quota"); the
+// Reverse arms (state word first, e.g. "exceeded your quota") must reject a
+// preceding negation chain ("you have not yet exceeded your quota"); the
 // forward arms already exclude negations because their connector sets do not
 // contain not/never.
-const NEGATED_BEFORE = /(?<!\b(?:not|never)\s)/;
+const NEGATED_BEFORE = /(?<!\b(?:not|never)\s(?:\w+\s){0,2})/;
 const ACCOUNT_QUOTA_WORDING_PATTERN =
-	/(?:insufficient|exceeded|exhausted|depleted)[_ ]?quota|quota[_ ]?(?:exceeded|reached|exhausted|insufficient|depleted)|\bquota\b(?:\s+(?:is|are|was|were|has|have|had|been|your|the|account)){0,3}[\s-]{0,3}(?:exhausted|exceeded|depleted|reached)\b|(?<!\b(?:not|never)\s)\b(?:exhausted|exceeded|depleted|reached)\b(?:\s+(?:your|the|account|its|their)){0,3}[\s-]{0,3}quota\b|quota.{0,40}will reset|usage.?limit[_ ]?reached|\b(?:usage.?limit|spend[a-z]*[-_ ]?limit)\b(?:\s+(?:has|have|had|been|was|were|is|are|your|the|account|our)){0,3}\s+(?:reached|exceeded|exhausted|hit)\b|(?<!\b(?:not|never)\s)\b(?:reached|exceeded|exhausted)\b(?:\s+(?:your|the|our|account)){0,3}\s+(?:usage.?limit|spend[a-z]*[-_ ]?limit)\b|\b(?:run out of|out of|no)\s+credits?\b|\bcredits?\b(?:\s+(?:is|are|was|were|have|has|been|account|balance)){0,3}[\s-]{0,3}(?:exhausted|depleted|insufficient|exceeded)\b|(?<!\b(?:not|never)\s)\b(?:insufficient|exhausted|depleted|exceeded)\b(?:\s+(?:your|the|all|available|account|balance)){0,2}[\s-]{0,3}credits?\b/i;
+	/(?:insufficient|exceeded|exhausted|depleted)[_ ]?quota|quota[_ ]?(?:exceeded|reached|exhausted|insufficient|depleted)|\bquota\b(?:\s+(?:is|are|was|were|has|have|had|been|your|the|account)){0,3}[\s-]{0,3}(?:exhausted|exceeded|depleted|reached)\b|(?<!\b(?:not|never)\s(?:\w+\s){0,2})\b(?:exhausted|exceeded|depleted|reached)\b(?:\s+(?:your|the|account|its|their)){0,3}[\s-]{0,3}quota\b|quota.{0,40}will reset|usage.?limit[_ ]?reached|\b(?:usage.?limit|spend[a-z]*[-_ ]?limit)\b(?:\s+(?:has|have|had|been|was|were|is|are|your|the|account|our)){0,3}\s+(?:reached|exceeded|exhausted|hit)\b|(?<!\b(?:not|never)\s(?:\w+\s){0,2})\b(?:reached|exceeded|exhausted)\b(?:\s+(?:your|the|our|account)){0,3}\s+(?:usage.?limit|spend[a-z]*[-_ ]?limit)\b|\b(?:run out of|out of|no)\s+credits?\b|\bcredits?\b(?:\s+(?:is|are|was|were|have|has|been|account|balance)){0,3}[\s-]{0,3}(?:exhausted|depleted|insufficient|exceeded)\b|(?<!\b(?:not|never)\s(?:\w+\s){0,2})\b(?:insufficient|exhausted|depleted|exceeded)\b(?:\s+(?:your|the|all|available|account|balance)){0,2}[\s-]{0,3}credits?\b/i;
+// Affirmative Chinese quota-exhaustion phrases; the parser-level
+// CN_QUOTA_EXHAUSTED_PATTERN also carries bare 使用…上限 co-occurrence, which
+// alone is validation wording ("使用上限配置无效"), not exhaustion.
+const CN_TERMINAL_QUOTA_PATTERN =
+	/(?:额度|配额|余额)(?:已)?(?:用|耗)(?:完|尽)|(?:额度|配额|余额|余额)不足|已达[到]?.{0,6}(?:上限|限额)/;
+
 export function isAccountQuotaExhaustedText(message: string): boolean {
 	// Balance/billing account-state phrases are self-contained diagnostics
 	// (they appear on non-rate-limit 4xx bodies), so they bypass the reason
@@ -360,15 +369,21 @@ export function isAccountQuotaExhaustedText(message: string): boolean {
 	if (reason !== "QUOTA_EXHAUSTED" && reason !== "INSUFFICIENT_G1_CREDITS_BALANCE") return false;
 	// The structured G1 credits-balance reason is authoritative on its own.
 	if (reason === "INSUFFICIENT_G1_CREDITS_BALANCE") return true;
-	// Subscription-cap evidence still needs an affirmative terminal state:
-	// bare subscription-metadata validation ("subscription plan cap must be
-	// positive") and negated caps ("subscription cap has not been reached")
-	// must stay raw.
-	if (matchesSubscriptionCapText(message) && hasAffirmativeTerminalState(message)) return true;
-	if (CN_QUOTA_EXHAUSTED_PATTERN.test(message) && !CN_TRANSIENT_CAP_PATTERN.test(message)) return true;
+	// Subscription-cap evidence needs an affirmative terminal state near the
+	// matched cap phrase: bare metadata validation ("subscription plan cap
+	// must be positive"), negated caps, and unrelated exhaustion elsewhere
+	// must all stay raw.
+	if (matchesSubscriptionCapText(message)) {
+		const m = SUBSCRIPTION_CAP_PATTERN.exec(message);
+		if (m) {
+			const near = message.slice(Math.max(0, m.index - 32), Math.min(message.length, m.index + m[0].length + 32));
+			if (windowHasAffirmativeState(near)) return true;
+		}
+	}
+	if (CN_TERMINAL_QUOTA_PATTERN.test(message) && !CN_TRANSIENT_CAP_PATTERN.test(message)) return true;
 	// The wording arms are phrase-level: connector sets exclude negations and
-	// the reverse arms look them up directly, so an unrelated affirmative
-	// state elsewhere in the body cannot satisfy a negated quota phrase.
+	// the reverse arms reject negation chains, so an affirmative state
+	// elsewhere in the body cannot satisfy a negated quota phrase.
 	return ACCOUNT_QUOTA_WORDING_PATTERN.test(message);
 }
 const STATUS_402_QUOTA_PATTERN =
