@@ -314,8 +314,10 @@ export function isUsageLimitStatus(status: number | undefined): boolean {
  * Account-quota-specific text predicate for consumers that classify whole
  * provider error bodies (not pre-filtered retry text): accepts QUOTA /
  * G1-credits reasons only when the message carries quota-account phrasing —
- * a quota/usage/spend-limit token, CN quota wording, or `credit(s)` in an
- * exhaustion state phrase. A bare `credit` token (e.g. "Credit card
+ * a quota/usage/spend-limit token, CN quota wording, `credit(s)` in an
+ * exhaustion state phrase, or subscription-cap phrasing (which the reason
+ * parser already routes to QUOTA via matchesSubscriptionCapText, transient
+ * per-second/minute caps excluded). A bare `credit` token (e.g. "Credit card
  * processing retries exhausted") is payment-context, not account quota.
  */
 const ACCOUNT_QUOTA_WORDING_PATTERN =
@@ -323,6 +325,7 @@ const ACCOUNT_QUOTA_WORDING_PATTERN =
 export function isAccountQuotaExhaustedText(message: string): boolean {
 	const reason = parseRateLimitReason(message);
 	if (reason !== "QUOTA_EXHAUSTED" && reason !== "INSUFFICIENT_G1_CREDITS_BALANCE") return false;
+	if (matchesSubscriptionCapText(message)) return true;
 	return ACCOUNT_QUOTA_WORDING_PATTERN.test(message);
 }
 const STATUS_402_QUOTA_PATTERN =

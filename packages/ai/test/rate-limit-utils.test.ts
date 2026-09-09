@@ -304,6 +304,14 @@ describe("isAccountQuotaExhaustedText", () => {
 		expect(isAccountQuotaExhaustedText("exceeded your available credits")).toBe(true);
 	});
 
+	it("accepts subscription-cap phrasing the reason parser routes to quota", () => {
+		expect(isAccountQuotaExhaustedText("Your subscription has reached its rate limit")).toBe(true);
+		expect(isAccountQuotaExhaustedText("monthly plan cap exceeded")).toBe(true);
+		// Transient per-minute caps keep the subscription matcher's exclusion.
+		expect(isAccountQuotaExhaustedText("subscription rate limit per minute")).toBe(false);
+		expect(isAccountQuotaExhaustedText("Your limit will reset in 30 seconds")).toBe(false);
+	});
+
 	it("rejects infrastructure exhaustion phrasing", () => {
 		// parseRateLimitReason's generic branch maps these to QUOTA_EXHAUSTED;
 		// whole-body consumers (web-search provider classification) must not

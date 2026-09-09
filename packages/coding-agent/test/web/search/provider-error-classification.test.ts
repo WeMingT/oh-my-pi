@@ -11,7 +11,8 @@ describe("classifyProviderHttpError credit-signal coverage", () => {
 		["Your credit balance has been exhausted", 400],
 		["billing is overdue", 400],
 		["账户额度已用尽", 429],
-		["余额不足，请充值", 400],
+		["Your subscription has reached its rate limit", 429],
+		["monthly plan cap exceeded", 429],
 	])("maps %s (%d) to a credits-exhausted error", (body, status) => {
 		const error = classifyProviderHttpError("xai", status, body);
 		expect(error).not.toBeNull();
