@@ -11,13 +11,34 @@ describe("classifyProviderHttpError credit-signal coverage", () => {
 		["Your credit balance has been exhausted", 400],
 		["billing is overdue", 400],
 		["账户额度已用尽", 429],
-		["quota has been exhausted", 429],
-		["you have exceeded your quota", 429],
+		["Insufficient balance", 403],
+		["额度不足", 429],
 	])("maps %s (%d) to a credits-exhausted error", (body, status) => {
 		const error = classifyProviderHttpError("xai", status, body);
 		expect(error).not.toBeNull();
 		expect(error?.message).toContain("credits exhausted");
 		expect(error?.status).toBe(status);
+	});
+
+	it("maps the structured G1 credits-balance reason to a credits-exhausted error", () => {
+		const body = `Cloud Code Assist API error (429): ${JSON.stringify({
+			error: {
+				code: 429,
+				message: "Credit balance is unavailable",
+				status: "RESOURCE_EXHAUSTED",
+				details: [
+					{
+						"@type": "type.googleapis.com/google.rpc.ErrorInfo",
+						reason: "INSUFFICIENT_G1_CREDITS_BALANCE",
+						domain: "cloudcode-pa.googleapis.com",
+					},
+				],
+			},
+		})}`;
+		const error = classifyProviderHttpError("xai", 429, body);
+		expect(error).not.toBeNull();
+		expect(error?.message).toContain("credits exhausted");
+		expect(error?.status).toBe(429);
 	});
 
 	it("does not misread unrelated bodies as credit failures", () => {

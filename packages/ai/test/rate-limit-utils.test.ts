@@ -299,6 +299,7 @@ describe("isAccountQuotaExhaustedText", () => {
 		expect(isAccountQuotaExhaustedText("quota has been exhausted")).toBe(true);
 		expect(isAccountQuotaExhaustedText("you have exceeded your quota")).toBe(true);
 		expect(isAccountQuotaExhaustedText("usage limit reached")).toBe(true);
+		expect(isAccountQuotaExhaustedText("额度不足")).toBe(true);
 		expect(isAccountQuotaExhaustedText("配额已耗尽")).toBe(true);
 		expect(isAccountQuotaExhaustedText("run out of credits")).toBe(true);
 		expect(isAccountQuotaExhaustedText("credits exhausted")).toBe(true);
@@ -320,8 +321,17 @@ describe("isAccountQuotaExhaustedText", () => {
 		// These appear on non-rate-limit 4xx bodies (validation, billing
 		// suspensions), so they bypass the reason gate.
 		expect(isAccountQuotaExhaustedText("Your balance is insufficient")).toBe(true);
+		expect(isAccountQuotaExhaustedText("Insufficient balance")).toBe(true);
 		expect(isAccountQuotaExhaustedText("billing account suspended")).toBe(true);
 		expect(isAccountQuotaExhaustedText("billing is overdue")).toBe(true);
+	});
+
+	it("returns true for the structured G1 credits-balance reason alone", () => {
+		expect(
+			isAccountQuotaExhaustedText(
+				googleRpc429("INSUFFICIENT_G1_CREDITS_BALANCE", undefined, "Credit balance is unavailable"),
+			),
+		).toBe(true);
 	});
 
 	it("rejects limit tokens discussed without a terminal cap state", () => {
