@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { formatSearchProviderFailure } from "@oh-my-pi/pi-coding-agent/web/search/provider";
 import { classifyProviderHttpError } from "@oh-my-pi/pi-coding-agent/web/search/providers/utils";
 
 describe("classifyProviderHttpError credit-signal coverage", () => {
@@ -49,6 +50,15 @@ describe("classifyProviderHttpError credit-signal coverage", () => {
 		expect(classifyProviderHttpError("xai", 429, "额度已用完")?.message).toContain("credits exhausted");
 		// Transient CN caps (rate/frequency ceilings) are not quota exhaustion.
 		expect(classifyProviderHttpError("xai", 429, "速率达到上限，请稍后重试")).toBeNull();
+	});
+
+	it("keeps the credits diagnosis when formatting auth-status billing failures", () => {
+		// 403 bodies classified as billing exhaustion must not be rewritten to
+		// the generic "authorization failed" summary: the user-facing fallback
+		// message would misdiagnose a billing failure as a bad API key.
+		const error = classifyProviderHttpError("brave", 403, "billing account suspended");
+		expect(error).not.toBeNull();
+		expect(formatSearchProviderFailure(error!, { id: "brave", label: "Brave" })).toContain("credits exhausted");
 	});
 
 	it("still maps bare 402/401/403 statuses when the body is silent", () => {

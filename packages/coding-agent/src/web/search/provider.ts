@@ -158,6 +158,13 @@ export function formatSearchProviderFailure(error: unknown, provider: Pick<Searc
 			if (error.provider === "zai") {
 				return error.message;
 			}
+			// classifyProviderHttpError may already have diagnosed a billing/
+			// quota condition on this status (its message carries the
+			// "credits exhausted" marker); keep that diagnosis instead of
+			// rewriting a billing failure into the generic auth summary.
+			if (error.message.includes("credits exhausted")) {
+				return error.message;
+			}
 			return `${getSearchProviderLabel(error.provider)} authorization failed (${error.status}). Check API key or base URL.`;
 		}
 		return error.message;
