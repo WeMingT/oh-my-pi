@@ -108,23 +108,18 @@ export function toSearchSources(
  * Returns `null` when the response does not match a known quota/auth signal,
  * leaving the caller to throw its provider-specific fallback error.
  */
-// Match account state phrases, not arbitrary text after a billing-related
-// substring (e.g. "load balancer" or "billing webhook exceeded ..."). Fixed
-// optional phrase components avoid unbounded connector scans.
-const CREDIT_BODY_PATTERN =
-	/credits?\s*(?:exhausted|exceeded)|quota|insufficient|\b(?:balance|billing(?:[ \t]+account)?)(?:[ \t]+(?:is|was|has[ \t]+been))?[ \t]+(?:exhausted|exceeded|insufficient|suspended|overdue|past[ \t]+due)\b|(?:额度|余额)\s*(?:已\s*)?(?:不足|用尽|耗尽|用完|超[限额])|(?:不足|用尽|耗尽)\s*(?:额度|余额)/i;
 
 export function classifyProviderHttpError(
 	provider: SearchProviderId,
 	status: number,
 	body: string,
 ): SearchProviderError | null {
-	// Reuse pi-ai's account-quota-specific predicate (quota/spend/subscription
-	// caps, Chinese quota wording) rather than the reason parser wholesale:
-	// its generic `exhausted` branch and the flag-level usage-limit matcher
-	// both accept bare resource_exhausted and infrastructure phrasing, which
-	// must stay raw on provider bodies.
-	if (CREDIT_BODY_PATTERN.test(body) || isAccountQuotaExhaustedText(body)) {
+	// Delegate whole-body quota detection to pi-ai's account-quota predicate
+	// (quota/usage/spend-limit caps with a terminal state, credits near an
+	// exhaustion state, billing account-state, CN quota wording, subscription
+	// caps) — its reason gate keeps bare resource_exhausted and
+	// infrastructure phrasing raw on provider bodies.
+	if (isAccountQuotaExhaustedText(body)) {
 		return new SearchProviderError(provider, `${provider}: credits exhausted`, status);
 	}
 	if (status === 402) {

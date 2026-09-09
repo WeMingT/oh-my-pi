@@ -312,6 +312,20 @@ describe("isAccountQuotaExhaustedText", () => {
 		expect(isAccountQuotaExhaustedText("Your limit will reset in 30 seconds")).toBe(false);
 	});
 
+	it("accepts balance/billing account-state phrases without a rate-limit reason", () => {
+		// These appear on non-rate-limit 4xx bodies (validation, billing
+		// suspensions), so they bypass the reason gate.
+		expect(isAccountQuotaExhaustedText("Your balance is insufficient")).toBe(true);
+		expect(isAccountQuotaExhaustedText("billing account suspended")).toBe(true);
+		expect(isAccountQuotaExhaustedText("billing is overdue")).toBe(true);
+	});
+
+	it("rejects limit tokens discussed without a terminal cap state", () => {
+		// Configuration/validation wording must not become quota diagnoses.
+		expect(isAccountQuotaExhaustedText("usage limit configuration is invalid")).toBe(false);
+		expect(isAccountQuotaExhaustedText("spending limit must be positive")).toBe(false);
+	});
+
 	it("rejects infrastructure exhaustion phrasing", () => {
 		// parseRateLimitReason's generic branch maps these to QUOTA_EXHAUSTED;
 		// whole-body consumers (web-search provider classification) must not

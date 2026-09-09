@@ -313,19 +313,30 @@ export function isUsageLimitStatus(status: number | undefined): boolean {
 /**
  * Account-quota-specific text predicate for consumers that classify whole
  * provider error bodies (not pre-filtered retry text): accepts QUOTA /
- * G1-credits reasons only when the message carries quota-account phrasing —
- * a quota/usage/spend-limit token, CN quota wording, `credit(s)` in an
- * exhaustion state phrase, or subscription-cap phrasing (which the reason
- * parser already routes to QUOTA via matchesSubscriptionCapText, transient
- * per-second/minute caps excluded). A bare `credit` token (e.g. "Credit card
- * processing retries exhausted") is payment-context, not account quota.
+ * G1-credits reasons only when the message carries a terminal account-cap
+ * phrase — quota/usage/spend-limit tokens must co-occur with a
+ * reached/exceeded/exhausted state (bare configuration or validation wording
+ * like "usage limit configuration is invalid" stays raw), `credit(s)` must
+ * sit in an exhaustion state phrase (a bare "Credit card …" is payment
+ * context), balance/billing take the account-state shapes, Chinese
+ * quota/balance exhaustion wording counts, and subscription-cap phrasing is
+ * accepted via matchesSubscriptionCapText (transient per-second/minute caps
+ * excluded).
  */
+const BILLING_ACCOUNT_STATE_PATTERN =
+	/\b(?:balance|billing(?:[ \t]+account)?)(?:[ \t]+(?:is|was|are|were|has[ \t]+been))?[ \t]+(?:exhausted|exceeded|insufficient|suspended|overdue|past[ \t]+due)\b/i;
 const ACCOUNT_QUOTA_WORDING_PATTERN =
-	/quota|spend[a-z]*[-_ ]?limit|usage.?limit|额度|配额|\b(?:run out of|out of|no)\s+credits?\b|\bcredits?\b(?:\s+(?:is|are|was|were|have|has|been|account|balance)){0,3}[\s-]{0,3}(?:exhausted|depleted|insufficient|exceeded)\b|\b(?:insufficient|exhausted|depleted|exceeded)\b(?:\s+(?:your|the|all|available|account|balance)){0,2}[\s-]{0,3}credits?\b/i;
+	/(?:insufficient|exceeded|exhausted|depleted)[_ ]?quota|quota[_ ]?(?:exceeded|reached|exhausted|insufficient|depleted)|quota.{0,40}will reset|usage.?limit[_ ]?reached|\b(?:usage.?limit|spend[a-z]*[-_ ]?limit)\b.{0,40}\b(?:reached|exceeded|exhausted|hit)\b|\b(?:reached|exceeded|exhausted)\b.{0,40}\b(?:usage.?limit|spend[a-z]*[-_ ]?limit)\b|\b(?:run out of|out of|no)\s+credits?\b|\bcredits?\b(?:\s+(?:is|are|was|were|have|has|been|account|balance)){0,3}[\s-]{0,3}(?:exhausted|depleted|insufficient|exceeded)\b|\b(?:insufficient|exhausted|depleted|exceeded)\b(?:\s+(?:your|the|all|available|account|balance)){0,2}[\s-]{0,3}credits?\b/i;
 export function isAccountQuotaExhaustedText(message: string): boolean {
+	// Balance/billing account-state phrases are self-contained diagnostics
+	// (they appear on non-rate-limit 4xx bodies), so they bypass the reason
+	// gate. All other arms require the parser to have already routed the
+	// body to QUOTA / G1-credits.
+	if (BILLING_ACCOUNT_STATE_PATTERN.test(message)) return true;
 	const reason = parseRateLimitReason(message);
 	if (reason !== "QUOTA_EXHAUSTED" && reason !== "INSUFFICIENT_G1_CREDITS_BALANCE") return false;
 	if (matchesSubscriptionCapText(message)) return true;
+	if (CN_QUOTA_EXHAUSTED_PATTERN.test(message) && !CN_TRANSIENT_CAP_PATTERN.test(message)) return true;
 	return ACCOUNT_QUOTA_WORDING_PATTERN.test(message);
 }
 const STATUS_402_QUOTA_PATTERN =

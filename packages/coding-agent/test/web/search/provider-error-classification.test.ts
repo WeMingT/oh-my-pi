@@ -32,6 +32,10 @@ describe("classifyProviderHttpError credit-signal coverage", () => {
 		expect(classifyProviderHttpError("xai", 500, "load balancer request exceeded timeout")).toBeNull();
 		expect(classifyProviderHttpError("xai", 500, "billing webhook exceeded its retry deadline")).toBeNull();
 		expect(classifyProviderHttpError("xai", 400, "balance exceededness is not a valid field")).toBeNull();
+		// A limit token alone is configuration/validation discussion, not a
+		// terminal account-cap state.
+		expect(classifyProviderHttpError("xai", 400, "usage limit configuration is invalid")).toBeNull();
+		expect(classifyProviderHttpError("xai", 400, "spending limit must be positive")).toBeNull();
 	});
 
 	it("stays linear on bodies stuffed with repeated billing tokens", () => {
