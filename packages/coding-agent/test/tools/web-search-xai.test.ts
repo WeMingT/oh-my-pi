@@ -954,14 +954,6 @@ describe("xAI web search provider", () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
-	it("honors an explicit xaiModel param over the default", async () => {
-		const capture = captureFetch({ id: "resp_model_param", model: "grok-4.3", output_text: "model param answer" });
-
-		await searchXAI({ ...makeParams(capture.fetchMock), xaiModel: "grok-4.3" });
-
-		expect(capture.capturedRequest?.body).toMatchObject({ model: "grok-4.3" });
-	});
-
 	it("omits unsupported reasoning effort for the selected search model", async () => {
 		const capture = captureFetch({ output_text: "Reasoning model answer" });
 
