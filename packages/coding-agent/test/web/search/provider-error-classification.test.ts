@@ -92,8 +92,21 @@ describe("classifyProviderHttpError", () => {
 			expect(bare?.message).toContain("credits exhausted");
 		}
 		// Unrelated structured codes stay out of the billing diagnosis.
-		const authBody = JSON.stringify({ error: { code: "invalid_api_key" }, message: "Bad key" });
+		const authBody = JSON.stringify({
+			error: { code: "invalid_api_key", type: "insufficient_quota_scope" },
+			message: "Bad key",
+		});
 		expect(classifyProviderHttpError("xai", 403, authBody)?.message).toContain("403 forbidden");
+	});
+
+	it.each([
+		["top-level type", JSON.stringify({ type: "insufficient_quota", message: "Generic provider failure" })],
+		["error.type", JSON.stringify({ error: { type: "insufficient_quota", message: "Generic provider failure" } })],
+	])("preserves the billing summary for %s on auth statuses", (_field, body) => {
+		for (const status of [401, 403]) {
+			const error = classifyProviderHttpError("xai", status, body);
+			expect(formatSearchProviderFailure(error, { id: "xai", label: "xAI" })).toContain("credits exhausted");
+		}
 	});
 
 	it("preserves quota-state and credit-insufficiency matches on auth statuses", () => {

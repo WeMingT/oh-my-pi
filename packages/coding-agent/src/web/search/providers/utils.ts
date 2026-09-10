@@ -145,17 +145,15 @@ const AMBIGUOUS_CREDIT_PATTERN = /quota|insufficient/i;
 // Whole messages from the original billing examples, not a natural-language grammar.
 const BILLING_MESSAGE_PATTERN =
 	/^\s*(?:insufficient[ \t_-]+balance|your credit balance has been exhausted|billing account suspended|billing is overdue|(?:账户)?额度已用尽|余额不足(?:，请充值)?)[.!。！]?\s*$/i;
-// Quota codes are explicit provider signals regardless of status: a relay
-// 401/403 envelope carrying {"error":{"code":"insufficient_quota"}}
-// diagnoses exhausted quota even when its message is generic, as does the
-// established bare `insufficient_quota` plain-text body.
+// Explicit quota signals can arrive as code/type fields or the bare token;
+// keep their billing diagnosis even when an auth status has a generic message.
 function hasExplicitQuotaErrorCode(body: string): boolean {
 	if (/^\s*insufficient_quota\s*$/i.test(body)) return true;
 	const parsed = tryParseJson(body);
 	if (!isRecord(parsed)) return false;
-	const codes: Array<unknown> = [parsed.code];
+	const codes: Array<unknown> = [parsed.code, parsed.type];
 	const errorField = parsed.error;
-	if (isRecord(errorField)) codes.push(errorField.code);
+	if (isRecord(errorField)) codes.push(errorField.code, errorField.type);
 	return codes.some(code => typeof code === "string" && code.toLowerCase() === "insufficient_quota");
 }
 
