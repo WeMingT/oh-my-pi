@@ -115,10 +115,12 @@ const AMBIGUOUS_CREDIT_PATTERN = /quota|insufficient/i;
 // Whole messages from the original billing examples, not a natural-language grammar.
 const BILLING_MESSAGE_PATTERN =
 	/^\s*(?:insufficient[ \t_-]+balance|your credit balance has been exhausted|billing account suspended|billing is overdue|(?:账户)?额度已用尽|余额不足(?:，请充值)?)[.!。！]?\s*$/i;
-// Structured quota codes are explicit provider signals regardless of status:
-// a relay 401/403 envelope carrying {"error":{"code":"insufficient_quota"}}
-// diagnoses exhausted quota even when its message is generic.
+// Quota codes are explicit provider signals regardless of status: a relay
+// 401/403 envelope carrying {"error":{"code":"insufficient_quota"}}
+// diagnoses exhausted quota even when its message is generic, as does the
+// established bare `insufficient_quota` plain-text body.
 function hasExplicitQuotaErrorCode(body: string): boolean {
+	if (/^\s*insufficient_quota\s*$/i.test(body)) return true;
 	const parsed = tryParseJson(body);
 	if (!isRecord(parsed)) return false;
 	const codes: Array<unknown> = [parsed.code];

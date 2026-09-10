@@ -83,6 +83,9 @@ describe("classifyProviderHttpError", () => {
 		for (const status of [401, 403]) {
 			const error = classifyProviderHttpError("xai", status, body);
 			expect(error?.message).toContain("credits exhausted");
+			// The established bare plain-text code form behaves the same.
+			const bare = classifyProviderHttpError("xai", status, "insufficient_quota");
+			expect(bare?.message).toContain("credits exhausted");
 		}
 		// Unrelated structured codes stay out of the billing diagnosis.
 		const authBody = JSON.stringify({ error: { code: "invalid_api_key" }, message: "Bad key" });

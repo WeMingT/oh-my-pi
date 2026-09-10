@@ -25,7 +25,7 @@
 - Streaming edit guard (`edit.streamingAbort`) no longer aborts on no-op preview results when replacement content produces no file changes, and carries the native patch diagnostic through the abort reason on genuine preview failures.
 - Repeated soft compaction now includes messages retained by the previous pass instead of silently dropping them from model context.
 - `omp models` now reports whether a model's images actually reach the provider, so an id stripped by a text-only catalog rule no longer shows `images: yes` ([#9697](https://github.com/can1357/oh-my-pi/issues/9697)).
-- Web search recognizes known balance/billing messages in plain-text and JSON errors — including envelopes where an unrelated `error` field would otherwise shadow a recognized top-level `message`, and the established `Insufficient balance` wording — preserves billing diagnostics on 401/403 responses (exact billing aliases and explicit credit-exhaustion wording) instead of reporting an authorization failure, and keeps authorization summaries on 401/403 when only ambiguous wording such as "insufficient authentication scope" matches.
+- Web search billing failures (e.g. `Insufficient balance`, exhausted quotas) now surface as credit-exhaustion errors instead of authorization failures on 401/403 responses.
 
 ## [18.1.16] - 2026-09-09
 
