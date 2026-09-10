@@ -108,6 +108,9 @@ const EXPLICIT_CREDIT_PATTERN = /(?<!\bno\s|\bnot\s|\bnever\s)credits?\s*(?:exha
 // credits") are unambiguous exhaustion signals on 401/403. Forward gaps
 // admit affirmative auxiliaries but never negation; reverse constructions
 // validate a preceding window for negation (including across adverbs).
+// Transient limit categories (concurrency caps, per-minute throttles) are
+// never depleted credit even when the wording holds a quota state: those
+// stay excluded via the central rate-limit classifier.
 const QUOTA_STATE_AUX_WORD = "(?:has|have|had|is|are|was|were|be|been)";
 const QUOTA_STATE_GAP = `[^a-z0-9]+(?:${QUOTA_STATE_AUX_WORD}[^a-z0-9]+)?(?:${QUOTA_STATE_AUX_WORD}[^a-z0-9]+)?`;
 const QUOTA_STATE_FORWARD_PATTERN = new RegExp(
@@ -118,23 +121,24 @@ const QUOTA_STATE_REVERSE_PATTERN = new RegExp(`(?:exceeded|exhausted)${QUOTA_ST
 const QUOTA_STATE_NEGATION_PATTERN = /\b(?:not|never|no)\b|n't/i;
 const QUOTA_STATE_WINDOW_CHARS = 48;
 
-function hasExplicitQuotaState(body: string): boolean {
-	// Concurrency caps in either order are transient limits, not depleted
-	// credit. The central rate-limit classifier owns that distinction
-	// (CONCURRENT_LIMIT requires a real cap signal, not a bare word match).
-	// Only the positive billing gate stays local: the central classifier
-	// answers retriability broadly (it accepts negations and generic quota
-	// prose), while this 401/403 contract needs exactness.
-	const concurrentCap = parseRateLimitReason(body) === "CONCURRENT_LIMIT";
-	if (QUOTA_STATE_FORWARD_PATTERN.test(body) && !concurrentCap) return true;
+function hasAffirmativeReverseQuotaState(body: string): boolean {
 	QUOTA_STATE_REVERSE_PATTERN.lastIndex = 0;
 	let reverse: RegExpExecArray | null;
 	while ((reverse = QUOTA_STATE_REVERSE_PATTERN.exec(body)) !== null) {
 		const start = reverse.index;
 		if (QUOTA_STATE_NEGATION_PATTERN.test(body.slice(Math.max(0, start - QUOTA_STATE_WINDOW_CHARS), start))) continue;
-		if (!concurrentCap) return true;
+		return true;
 	}
 	return false;
+}
+
+function hasExplicitQuotaState(body: string): boolean {
+	if (!QUOTA_STATE_FORWARD_PATTERN.test(body) && !hasAffirmativeReverseQuotaState(body)) return false;
+	// Only the positive billing gate stays local: the central classifier
+	// answers retriability broadly (it accepts negations and generic quota
+	// prose), while this 401/403 contract needs exactness.
+	const reason = parseRateLimitReason(body);
+	return reason !== "CONCURRENT_LIMIT" && reason !== "RATE_LIMIT_EXCEEDED";
 }
 
 // Ambiguous arms of the legacy heuristic (`quota`, `insufficient`): valid
