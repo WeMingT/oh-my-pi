@@ -98,10 +98,14 @@ export function toSearchSources(
 	}));
 }
 
-// Legacy English heuristic, unchanged for non-auth statuses. It also matches
-// auth wording such as "insufficient authentication scope", so on 401/403 it
-// must not produce the billing diagnosis (see classifyProviderHttpError).
-const CREDIT_BODY_PATTERN = /credits?\s*(?:exhausted|exceeded)|quota|insufficient/i;
+// Explicit credit-exhaustion arm of the legacy heuristic: unambiguous wording
+// that keeps its billing diagnosis on every status.
+const EXPLICIT_CREDIT_PATTERN = /credits?\s*(?:exhausted|exceeded)/i;
+// Ambiguous arms of the legacy heuristic (`quota`, `insufficient`): valid
+// billing signals on non-auth statuses, but on 401/403 they usually describe
+// authorization problems ("insufficient authentication scope") and must not
+// produce the billing diagnosis (see classifyProviderHttpError).
+const AMBIGUOUS_CREDIT_PATTERN = /quota|insufficient/i;
 // Whole messages from the original billing examples, not a natural-language grammar.
 const BILLING_MESSAGE_PATTERN =
 	/^\s*(?:your credit balance has been exhausted|billing account suspended|billing is overdue|(?:账户)?额度已用尽|余额不足(?:，请充值)?)[.!。！]?\s*$/i;
@@ -140,11 +144,15 @@ export function classifyProviderHttpError(
 	status: number,
 	body: string,
 ): SearchProviderError | null {
-	// Exact billing aliases diagnose a billing failure on any status. The
-	// broad heuristic alone must not diagnose 401/403 responses: auth bodies
-	// like "insufficient authentication scope" would otherwise be exposed as
-	// a billing failure instead of an authorization failure.
-	if (hasBillingAliasMessage(body) || (CREDIT_BODY_PATTERN.test(body) && status !== 401 && status !== 403)) {
+	// Exact billing aliases and the explicit credit arm diagnose a billing
+	// failure on any status. The ambiguous arms are excluded on 401/403: auth
+	// bodies like "insufficient authentication scope" would otherwise be
+	// exposed as a billing failure instead of an authorization failure.
+	if (
+		hasBillingAliasMessage(body) ||
+		EXPLICIT_CREDIT_PATTERN.test(body) ||
+		(AMBIGUOUS_CREDIT_PATTERN.test(body) && status !== 401 && status !== 403)
+	) {
 		return new SearchProviderError(provider, `${provider}: credits exhausted`, status);
 	}
 	if (status === 402) {

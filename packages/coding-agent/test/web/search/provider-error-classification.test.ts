@@ -63,6 +63,19 @@ describe("classifyProviderHttpError", () => {
 		expect(formatSearchProviderFailure(error!, { id: "xai", label: "xAI" })).toContain("authorization failed");
 	});
 
+	it("preserves explicit credit-exhaustion matches on auth statuses", () => {
+		// The auth-status exclusion exists to stop ambiguous wording such as
+		// "insufficient authentication scope" from becoming a billing failure;
+		// unambiguous credit arms of the legacy heuristic keep their billing
+		// diagnosis on 401/403 (the pre-PR behavior).
+		for (const body of ["credits exhausted", "credit exceeded"]) {
+			for (const status of [401, 403]) {
+				const error = classifyProviderHttpError("xai", status, body);
+				expect(error?.message).toContain("credits exhausted");
+			}
+		}
+	});
+
 	it("still maps bare 402/401/403 statuses when the body is silent", () => {
 		expect(classifyProviderHttpError("xai", 402, "")?.message).toContain("credits exhausted");
 		expect(classifyProviderHttpError("xai", 401, "")?.message).toContain("401 unauthorized");
