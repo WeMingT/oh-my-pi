@@ -117,6 +117,17 @@ describe("classifyProviderHttpError", () => {
 		expect(classifyProviderHttpError("xai", 401, body)?.message).toContain("401 unauthorized");
 	});
 
+	it("accepts copulas but rejects negated quota-state matches", () => {
+		// Affirmative auxiliaries between quota and state keep the billing
+		// diagnosis; negation anywhere in the construction stays an auth failure.
+		for (const body of ["quota has been exceeded", "quota was exhausted"]) {
+			expect(classifyProviderHttpError("xai", 403, body)?.message).toContain("credits exhausted");
+		}
+		for (const body of ["request has not exceeded quota", "haven't exceeded quota", "quota has not been exceeded"]) {
+			expect(classifyProviderHttpError("xai", 403, body)?.message).toContain("403 forbidden");
+		}
+	});
+
 	it("still maps bare 402/401/403 statuses when the body is silent", () => {
 		expect(classifyProviderHttpError("xai", 402, "")?.message).toContain("credits exhausted");
 		expect(classifyProviderHttpError("xai", 401, "")?.message).toContain("401 unauthorized");

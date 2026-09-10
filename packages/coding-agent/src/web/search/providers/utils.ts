@@ -101,14 +101,23 @@ export function toSearchSources(
 // Explicit credit-exhaustion arm of the legacy heuristic: unambiguous wording
 // that keeps its billing diagnosis on every status.
 const EXPLICIT_CREDIT_PATTERN = /credits?\s*(?:exhausted|exceeded)/i;
-// Quota wording paired with a terminal state ("quota exceeded", "exceeded
-// quota") and credit insufficiency ("insufficient credits") are unambiguous
-// exhaustion signals: they keep the billing diagnosis on 401/403, where bare
-// "quota"/"insufficient" usually describes authorization problems. A quota
-// phrase qualified by concurrency ("concurrent requests quota exceeded") is a
-// transient concurrency cap, not depleted credit, and stays excluded.
-const EXPLICIT_QUOTA_STATE_PATTERN =
-	/quota[^a-z0-9]+(?:exceeded|exhausted)|(?:exceeded|exhausted)[^a-z0-9]+quota|insufficient[^a-z0-9]+credits?/i;
+// Quota wording paired with a terminal state ("quota exceeded", "quota has
+// been exceeded", "exceeded quota") and credit insufficiency ("insufficient
+// credits") are unambiguous exhaustion signals: they keep the billing
+// diagnosis on 401/403, where bare "quota"/"insufficient" usually describes
+// authorization problems. The quota/terminal gap admits affirmative
+// auxiliaries but never negation ("quota has not been exceeded",
+// "request has not exceeded quota" stay out), and a quota phrase qualified
+// by concurrency ("concurrent requests quota exceeded") is a transient
+// concurrency cap, not depleted credit, and stays excluded.
+const QUOTA_STATE_AUX_WORD = "(?:has|have|had|is|are|was|were|be|been)";
+const QUOTA_STATE_GAP = `[^a-z0-9]+(?:${QUOTA_STATE_AUX_WORD}[^a-z0-9]+)?(?:${QUOTA_STATE_AUX_WORD}[^a-z0-9]+)?`;
+const EXPLICIT_QUOTA_STATE_PATTERN = new RegExp(
+	`(?<!\\bno\\s)quota${QUOTA_STATE_GAP}(?:exceeded|exhausted)` +
+		`|(?<!\\bnot\\s|\\bnever\\s|\\bno\\s|n't\\s)(?:exceeded|exhausted)${QUOTA_STATE_GAP}quota` +
+		`|insufficient[^a-z0-9]+credits?`,
+	"i",
+);
 const CONCURRENT_QUOTA_QUALIFIER_PATTERN = /concurren[a-z]*(?:\s+[a-z]+){0,2}\s+quota/i;
 // Ambiguous arms of the legacy heuristic (`quota`, `insufficient`): valid
 // billing signals on non-auth statuses, but on 401/403 they usually describe
