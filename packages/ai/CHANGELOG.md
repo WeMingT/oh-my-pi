@@ -17,8 +17,6 @@
 
 ### Fixed
 
-- Account-quota detection recognizes qualified and underscored billing messages without misclassifying unrelated subscription errors or stalling on long whitespace.
-- Account-quota detection recognizes qualified limits, underscored balance errors, and explicit resource/quota hints without treating bare resource statuses as account exhaustion or stalling on long whitespace.
 - Account-quota detection recognizes qualified limits, affirmative modal exceedance, Chinese usage caps, underscored balance errors, and explicit resource/quota hints without treating bare resource statuses as account exhaustion or stalling on long whitespace.
 - GitHub Copilot sign-in keeps the GitHub-owned Copilot CLI OAuth app on Enterprise domains: private instances run their own OAuth registry and reject the github.com-registered OpenCode client, which is now used only for public github.com sign-ins ([#11285](https://github.com/can1357/oh-my-pi/pull/11285) by [@H4vC](https://github.com/H4vC))
 - GitHub Copilot sign-in uses the minimal-grant OpenCode OAuth app again (`read:user` only): GitHub renders each app's existing per-user grant on the consent page, so Enterprise organizations that block the Copilot CLI app's broad historic grant can log in as on 18.1.4. API request identity still mimics the Copilot CLI, and tokens minted by either app keep working ([#11280](https://github.com/can1357/oh-my-pi/pull/11280) by [@H4vC](https://github.com/H4vC)).
