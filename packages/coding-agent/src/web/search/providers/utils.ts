@@ -109,6 +109,17 @@ const AMBIGUOUS_CREDIT_PATTERN = /quota|insufficient/i;
 // Whole messages from the original billing examples, not a natural-language grammar.
 const BILLING_MESSAGE_PATTERN =
 	/^\s*(?:insufficient[ \t_-]+balance|your credit balance has been exhausted|billing account suspended|billing is overdue|(?:账户)?额度已用尽|余额不足(?:，请充值)?)[.!。！]?\s*$/i;
+// Structured quota codes are explicit provider signals regardless of status:
+// a relay 401/403 envelope carrying {"error":{"code":"insufficient_quota"}}
+// diagnoses exhausted quota even when its message is generic.
+function hasExplicitQuotaErrorCode(body: string): boolean {
+	const parsed = tryParseJson(body);
+	if (!isRecord(parsed)) return false;
+	const codes: Array<unknown> = [parsed.code];
+	const errorField = parsed.error;
+	if (isRecord(errorField)) codes.push(errorField.code);
+	return codes.some(code => typeof code === "string" && code.toLowerCase() === "insufficient_quota");
+}
 
 // Whether the body carries one of the exact billing aliases, either as the
 // whole plain-text message or inside a JSON error envelope.
@@ -144,12 +155,14 @@ export function classifyProviderHttpError(
 	status: number,
 	body: string,
 ): SearchProviderError | null {
-	// Exact billing aliases and the explicit credit arm diagnose a billing
-	// failure on any status. The ambiguous arms are excluded on 401/403: auth
-	// bodies like "insufficient authentication scope" would otherwise be
-	// exposed as a billing failure instead of an authorization failure.
+	// Exact billing aliases, explicit credit wording, and structured quota
+	// codes diagnose a billing failure on any status. The ambiguous arms are
+	// excluded on 401/403: auth bodies like "insufficient authentication
+	// scope" would otherwise be exposed as a billing failure instead of an
+	// authorization failure.
 	if (
 		hasBillingAliasMessage(body) ||
+		hasExplicitQuotaErrorCode(body) ||
 		EXPLICIT_CREDIT_PATTERN.test(body) ||
 		(AMBIGUOUS_CREDIT_PATTERN.test(body) && status !== 401 && status !== 403)
 	) {

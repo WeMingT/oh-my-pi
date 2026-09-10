@@ -76,6 +76,19 @@ describe("classifyProviderHttpError", () => {
 		}
 	});
 
+	it("preserves structured insufficient_quota codes on auth statuses", () => {
+		// The code is an explicit quota signal even when the envelope message
+		// is generic; the auth-status exclusion only gates ambiguous wording.
+		const body = JSON.stringify({ error: { code: "insufficient_quota" }, message: "Generic provider failure" });
+		for (const status of [401, 403]) {
+			const error = classifyProviderHttpError("xai", status, body);
+			expect(error?.message).toContain("credits exhausted");
+		}
+		// Unrelated structured codes stay out of the billing diagnosis.
+		const authBody = JSON.stringify({ error: { code: "invalid_api_key" }, message: "Bad key" });
+		expect(classifyProviderHttpError("xai", 403, authBody)?.message).toContain("403 forbidden");
+	});
+
 	it("still maps bare 402/401/403 statuses when the body is silent", () => {
 		expect(classifyProviderHttpError("xai", 402, "")?.message).toContain("credits exhausted");
 		expect(classifyProviderHttpError("xai", 401, "")?.message).toContain("401 unauthorized");
