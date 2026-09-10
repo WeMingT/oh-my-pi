@@ -89,6 +89,22 @@ describe("classifyProviderHttpError", () => {
 		expect(classifyProviderHttpError("xai", 403, authBody)?.message).toContain("403 forbidden");
 	});
 
+	it("preserves quota-state and credit-insufficiency matches on auth statuses", () => {
+		// Quota wording with a terminal state and bare credit insufficiency
+		// are unambiguous exhaustion signals; the auth-status exclusion only
+		// gates bare "quota"/"insufficient" prose.
+		for (const body of ["quota exceeded", "quota exhausted", "exceeded quota", "insufficient credits"]) {
+			for (const status of [401, 403]) {
+				const error = classifyProviderHttpError("xai", status, body);
+				expect(error?.message).toContain("credits exhausted");
+			}
+		}
+		// Near-misses without a terminal state or credit word stay auth failures.
+		for (const body of ["quota check failed", "load balancer request exceeded timeout"]) {
+			expect(classifyProviderHttpError("xai", 403, body)?.message).toContain("403 forbidden");
+		}
+	});
+
 	it("still maps bare 402/401/403 statuses when the body is silent", () => {
 		expect(classifyProviderHttpError("xai", 402, "")?.message).toContain("credits exhausted");
 		expect(classifyProviderHttpError("xai", 401, "")?.message).toContain("401 unauthorized");

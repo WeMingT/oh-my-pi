@@ -101,6 +101,12 @@ export function toSearchSources(
 // Explicit credit-exhaustion arm of the legacy heuristic: unambiguous wording
 // that keeps its billing diagnosis on every status.
 const EXPLICIT_CREDIT_PATTERN = /credits?\s*(?:exhausted|exceeded)/i;
+// Quota wording paired with a terminal state ("quota exceeded", "exceeded
+// quota") and credit insufficiency ("insufficient credits") are unambiguous
+// exhaustion signals: they keep the billing diagnosis on 401/403, where bare
+// "quota"/"insufficient" usually describes authorization problems.
+const EXPLICIT_QUOTA_STATE_PATTERN =
+	/quota[^a-z0-9]+(?:exceeded|exhausted)|(?:exceeded|exhausted)[^a-z0-9]+quota|insufficient[^a-z0-9]+credits?/i;
 // Ambiguous arms of the legacy heuristic (`quota`, `insufficient`): valid
 // billing signals on non-auth statuses, but on 401/403 they usually describe
 // authorization problems ("insufficient authentication scope") and must not
@@ -155,15 +161,16 @@ export function classifyProviderHttpError(
 	status: number,
 	body: string,
 ): SearchProviderError | null {
-	// Exact billing aliases, explicit credit wording, and structured quota
-	// codes diagnose a billing failure on any status. The ambiguous arms are
-	// excluded on 401/403: auth bodies like "insufficient authentication
-	// scope" would otherwise be exposed as a billing failure instead of an
-	// authorization failure.
+	// Exact billing aliases, explicit credit/quota wording, and structured
+	// quota codes diagnose a billing failure on any status. The ambiguous
+	// arms are excluded on 401/403: auth bodies like "insufficient
+	// authentication scope" would otherwise be exposed as a billing failure
+	// instead of an authorization failure.
 	if (
 		hasBillingAliasMessage(body) ||
 		hasExplicitQuotaErrorCode(body) ||
 		EXPLICIT_CREDIT_PATTERN.test(body) ||
+		EXPLICIT_QUOTA_STATE_PATTERN.test(body) ||
 		(AMBIGUOUS_CREDIT_PATTERN.test(body) && status !== 401 && status !== 403)
 	) {
 		return new SearchProviderError(provider, `${provider}: credits exhausted`, status);
