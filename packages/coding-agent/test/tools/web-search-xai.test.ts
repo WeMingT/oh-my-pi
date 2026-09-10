@@ -945,13 +945,25 @@ describe("xAI web search provider", () => {
 	it("throws a clear missing-key error before fetch when credentials are unavailable", async () => {
 		const fetchMock = vi.fn(() => Promise.resolve(new Response("{}", { status: 200 }))) as unknown as FetchImpl;
 
-		try {
-			await searchXAI(makeParams(fetchMock, makeAuthStorage({})));
-			expect.unreachable("missing xAI credentials should reject");
-		} catch (error) {
-			expect(error).toBeInstanceOf(Error);
-		}
+		await expect(searchXAI(makeParams(fetchMock, makeAuthStorage({})))).rejects.toMatchObject({
+			name: "MissingApiKeyError",
+			message: expect.stringContaining("XAI_API_KEY"),
+		});
 		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it("uses OAuth-only model compatibility without a model registry", async () => {
+		const capture = captureFetch({ output_text: "OAuth model answer" });
+
+		await searchXAI({
+			...makeParams(capture.fetchMock, makeAuthStorage({ "xai-oauth": "oauth-token" })),
+			xaiModel: "grok-4.20-multi-agent-0309",
+		});
+
+		expect(capture.capturedRequest?.body).toMatchObject({
+			model: "grok-4.20-multi-agent-0309",
+			reasoning: { effort: "low" },
+		});
 	});
 
 	it("omits unsupported reasoning effort for the selected search model", async () => {

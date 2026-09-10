@@ -143,7 +143,7 @@ function buildRequestBody(params: SearchParams, modelId: string, provider: XAIHt
 		],
 		tools: [webSearchTool],
 	};
-	const model = params.modelRegistry?.find(provider, modelId) ?? getBundledModel("xai", modelId);
+	const model = params.modelRegistry?.find(provider, modelId) ?? getBundledModel(provider, modelId);
 	const compat = model?.compat;
 	if (
 		compat &&
