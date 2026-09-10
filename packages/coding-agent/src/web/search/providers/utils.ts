@@ -108,7 +108,7 @@ const EXPLICIT_CREDIT_PATTERN = /credits?\s*(?:exhausted|exceeded)/i;
 const AMBIGUOUS_CREDIT_PATTERN = /quota|insufficient/i;
 // Whole messages from the original billing examples, not a natural-language grammar.
 const BILLING_MESSAGE_PATTERN =
-	/^\s*(?:your credit balance has been exhausted|billing account suspended|billing is overdue|(?:账户)?额度已用尽|余额不足(?:，请充值)?)[.!。！]?\s*$/i;
+	/^\s*(?:insufficient[ \t_-]+balance|your credit balance has been exhausted|billing account suspended|billing is overdue|(?:账户)?额度已用尽|余额不足(?:，请充值)?)[.!。！]?\s*$/i;
 
 // Whether the body carries one of the exact billing aliases, either as the
 // whole plain-text message or inside a JSON error envelope.

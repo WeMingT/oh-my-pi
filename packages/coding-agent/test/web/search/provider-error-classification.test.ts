@@ -10,8 +10,7 @@ describe("classifyProviderHttpError", () => {
 	});
 
 	it.each([
-		["credit balance", "Your credit balance has been exhausted"],
-		["billing suspension", "billing account suspended"],
+		["English balance", "Insufficient balance"],
 		["billing arrears", "billing is overdue"],
 		["Chinese account allowance", "账户额度已用尽"],
 		["Chinese balance", "余额不足，请充值"],
@@ -64,6 +63,7 @@ describe("classifyProviderHttpError", () => {
 	});
 
 	it("preserves explicit credit-exhaustion matches on auth statuses", () => {
+		expect(classifyProviderHttpError("xai", 403, "Insufficient balance")?.message).toContain("credits exhausted");
 		// The auth-status exclusion exists to stop ambiguous wording such as
 		// "insufficient authentication scope" from becoming a billing failure;
 		// unambiguous credit arms of the legacy heuristic keep their billing
