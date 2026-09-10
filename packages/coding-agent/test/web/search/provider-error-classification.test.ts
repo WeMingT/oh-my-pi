@@ -126,6 +126,14 @@ describe("classifyProviderHttpError", () => {
 		for (const body of ["request has not exceeded quota", "haven't exceeded quota", "quota has not been exceeded"]) {
 			expect(classifyProviderHttpError("xai", 403, body)?.message).toContain("403 forbidden");
 		}
+		// Negation stays effective across intervening adverbs.
+		for (const body of ["never actually exceeded quota", "haven't actually exceeded quota"]) {
+			expect(classifyProviderHttpError("xai", 403, body)?.message).toContain("403 forbidden");
+		}
+		// Concurrency qualification after the quota state is also excluded.
+		expect(classifyProviderHttpError("xai", 403, "quota exceeded due to concurrent requests")?.message).toContain(
+			"403 forbidden",
+		);
 	});
 
 	it("still maps bare 402/401/403 statuses when the body is silent", () => {

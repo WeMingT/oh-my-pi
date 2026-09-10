@@ -105,20 +105,49 @@ const EXPLICIT_CREDIT_PATTERN = /credits?\s*(?:exhausted|exceeded)/i;
 // been exceeded", "exceeded quota") and credit insufficiency ("insufficient
 // credits") are unambiguous exhaustion signals: they keep the billing
 // diagnosis on 401/403, where bare "quota"/"insufficient" usually describes
-// authorization problems. The quota/terminal gap admits affirmative
-// auxiliaries but never negation ("quota has not been exceeded",
-// "request has not exceeded quota" stay out), and a quota phrase qualified
-// by concurrency ("concurrent requests quota exceeded") is a transient
-// concurrency cap, not depleted credit, and stays excluded.
+// authorization problems. Forward gaps admit affirmative auxiliaries but
+// never negation, so "quota has not been exceeded" and "no quota exceeded"
+// stay out by construction. Reverse constructions ("exceeded quota") validate
+// a preceding window instead: negation ("not", "never", "no", contractions,
+// with intervening adverbs) keeps the match ambiguous. Concurrency wording
+// near a quota state in either order ("concurrent requests quota exceeded",
+// "quota exceeded due to concurrent requests") is a transient concurrency
+// cap, not depleted credit, and stays excluded.
 const QUOTA_STATE_AUX_WORD = "(?:has|have|had|is|are|was|were|be|been)";
 const QUOTA_STATE_GAP = `[^a-z0-9]+(?:${QUOTA_STATE_AUX_WORD}[^a-z0-9]+)?(?:${QUOTA_STATE_AUX_WORD}[^a-z0-9]+)?`;
-const EXPLICIT_QUOTA_STATE_PATTERN = new RegExp(
-	`(?<!\\bno\\s)quota${QUOTA_STATE_GAP}(?:exceeded|exhausted)` +
-		`|(?<!\\bnot\\s|\\bnever\\s|\\bno\\s|n't\\s)(?:exceeded|exhausted)${QUOTA_STATE_GAP}quota` +
-		`|insufficient[^a-z0-9]+credits?`,
+const QUOTA_STATE_FORWARD_PATTERN = new RegExp(
+	`(?<!\\bno\\s)quota${QUOTA_STATE_GAP}(?:exceeded|exhausted)|insufficient[^a-z0-9]+credits?`,
 	"i",
 );
-const CONCURRENT_QUOTA_QUALIFIER_PATTERN = /concurren[a-z]*(?:\s+[a-z]+){0,2}\s+quota/i;
+const QUOTA_STATE_REVERSE_PATTERN = new RegExp(`(?:exceeded|exhausted)${QUOTA_STATE_GAP}quota`, "gi");
+const QUOTA_STATE_NEGATION_PATTERN = /\b(?:not|never|no)\b|n't/i;
+const QUOTA_STATE_CONCURRENCY_PATTERN = /concurren[a-z]*/i;
+const QUOTA_STATE_WINDOW_CHARS = 48;
+
+function hasExplicitQuotaState(body: string): boolean {
+	const forward = QUOTA_STATE_FORWARD_PATTERN.exec(body);
+	if (forward?.index !== undefined) {
+		const window = body.slice(
+			Math.max(0, forward.index - QUOTA_STATE_WINDOW_CHARS),
+			forward.index + forward[0].length + QUOTA_STATE_WINDOW_CHARS,
+		);
+		if (!QUOTA_STATE_CONCURRENCY_PATTERN.test(window)) return true;
+	}
+	QUOTA_STATE_REVERSE_PATTERN.lastIndex = 0;
+	let reverse: RegExpExecArray | null;
+	while ((reverse = QUOTA_STATE_REVERSE_PATTERN.exec(body)) !== null) {
+		const start = reverse.index;
+		if (QUOTA_STATE_NEGATION_PATTERN.test(body.slice(Math.max(0, start - QUOTA_STATE_WINDOW_CHARS), start))) continue;
+		const window = body.slice(
+			Math.max(0, start - QUOTA_STATE_WINDOW_CHARS),
+			start + reverse[0].length + QUOTA_STATE_WINDOW_CHARS,
+		);
+		if (QUOTA_STATE_CONCURRENCY_PATTERN.test(window)) continue;
+		return true;
+	}
+	return false;
+}
+
 // Ambiguous arms of the legacy heuristic (`quota`, `insufficient`): valid
 // billing signals on non-auth statuses, but on 401/403 they usually describe
 // authorization problems ("insufficient authentication scope") and must not
@@ -184,7 +213,7 @@ export function classifyProviderHttpError(
 		hasBillingAliasMessage(body) ||
 		hasExplicitQuotaErrorCode(body) ||
 		EXPLICIT_CREDIT_PATTERN.test(body) ||
-		(EXPLICIT_QUOTA_STATE_PATTERN.test(body) && !CONCURRENT_QUOTA_QUALIFIER_PATTERN.test(body)) ||
+		hasExplicitQuotaState(body) ||
 		(AMBIGUOUS_CREDIT_PATTERN.test(body) && status !== 401 && status !== 403)
 	) {
 		return new SearchProviderError(provider, `${provider}: credits exhausted`, status);
