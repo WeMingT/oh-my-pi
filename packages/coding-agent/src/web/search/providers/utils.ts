@@ -104,9 +104,12 @@ const EXPLICIT_CREDIT_PATTERN = /credits?\s*(?:exhausted|exceeded)/i;
 // Quota wording paired with a terminal state ("quota exceeded", "exceeded
 // quota") and credit insufficiency ("insufficient credits") are unambiguous
 // exhaustion signals: they keep the billing diagnosis on 401/403, where bare
-// "quota"/"insufficient" usually describes authorization problems.
+// "quota"/"insufficient" usually describes authorization problems. A quota
+// phrase qualified by concurrency ("concurrent requests quota exceeded") is a
+// transient concurrency cap, not depleted credit, and stays excluded.
 const EXPLICIT_QUOTA_STATE_PATTERN =
 	/quota[^a-z0-9]+(?:exceeded|exhausted)|(?:exceeded|exhausted)[^a-z0-9]+quota|insufficient[^a-z0-9]+credits?/i;
+const CONCURRENT_QUOTA_QUALIFIER_PATTERN = /concurren[a-z]*(?:\s+[a-z]+){0,2}\s+quota/i;
 // Ambiguous arms of the legacy heuristic (`quota`, `insufficient`): valid
 // billing signals on non-auth statuses, but on 401/403 they usually describe
 // authorization problems ("insufficient authentication scope") and must not
@@ -172,7 +175,7 @@ export function classifyProviderHttpError(
 		hasBillingAliasMessage(body) ||
 		hasExplicitQuotaErrorCode(body) ||
 		EXPLICIT_CREDIT_PATTERN.test(body) ||
-		EXPLICIT_QUOTA_STATE_PATTERN.test(body) ||
+		(EXPLICIT_QUOTA_STATE_PATTERN.test(body) && !CONCURRENT_QUOTA_QUALIFIER_PATTERN.test(body)) ||
 		(AMBIGUOUS_CREDIT_PATTERN.test(body) && status !== 401 && status !== 403)
 	) {
 		return new SearchProviderError(provider, `${provider}: credits exhausted`, status);

@@ -108,6 +108,15 @@ describe("classifyProviderHttpError", () => {
 		}
 	});
 
+	it("keeps concurrency-qualified quotas out of credit exhaustion", () => {
+		// A concurrency cap ("concurrent requests quota exceeded") is a
+		// transient limit, not depleted credit: it must not become a billing
+		// diagnosis even though the quota-state arm matches the tail phrase.
+		const body = "Online prediction concurrent requests quota exceeded";
+		expect(classifyProviderHttpError("xai", 403, body)?.message).toContain("403 forbidden");
+		expect(classifyProviderHttpError("xai", 401, body)?.message).toContain("401 unauthorized");
+	});
+
 	it("still maps bare 402/401/403 statuses when the body is silent", () => {
 		expect(classifyProviderHttpError("xai", 402, "")?.message).toContain("credits exhausted");
 		expect(classifyProviderHttpError("xai", 401, "")?.message).toContain("401 unauthorized");
