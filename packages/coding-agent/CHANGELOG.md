@@ -25,6 +25,7 @@
 - Streaming edit guard (`edit.streamingAbort`) no longer aborts on no-op preview results when replacement content produces no file changes, and carries the native patch diagnostic through the abort reason on genuine preview failures.
 - Repeated soft compaction now includes messages retained by the previous pass instead of silently dropping them from model context.
 - `omp models` now reports whether a model's images actually reach the provider, so an id stripped by a text-only catalog rule no longer shows `images: yes` ([#9697](https://github.com/can1357/oh-my-pi/issues/9697)).
+- Web search recognizes known balance/billing messages in plain-text and JSON errors — including envelopes where an unrelated `error` field would otherwise shadow a recognized top-level `message`, and the established `Insufficient balance` wording — preserves billing diagnostics on 401/403 responses (exact billing aliases and explicit credit-exhaustion wording) instead of reporting an authorization failure, and keeps authorization summaries on 401/403 when only ambiguous wording such as "insufficient authentication scope" matches.
 
 ## [18.1.16] - 2026-09-09
 
@@ -37,7 +38,6 @@
 ### Fixed
 
 - Fixed automatic recovery from proxied Python HTTP/2 stream resets and HTTP/1.1 chunked response interruptions, including continuation after completed tool calls ([#11160](https://github.com/can1357/oh-my-pi/pull/11160) by [@cyriusweng](https://github.com/cyriusweng)).
-- Web search recognizes known balance/billing messages in plain-text and JSON errors — including envelopes where an unrelated `error` field would otherwise shadow a recognized top-level `message`, and the established `Insufficient balance` wording — preserves billing diagnostics on 401/403 responses (exact billing aliases and explicit credit-exhaustion wording) instead of reporting an authorization failure, and keeps authorization summaries on 401/403 when only ambiguous wording such as "insufficient authentication scope" matches.
 - Read error and preview rendering now sanitizes tabs and Windows-style CRLF (e.g. ssh host-key failures, tab-indented fetched content) so raw output can no longer tear the result frame.
 - Unset `tiny` model roles now honor the configured `@smol` fallback in direct execution and the `/models` Roles view ([#11311](https://github.com/can1357/oh-my-pi/issues/11311)).
 - Extension Control Center (`/extensions`) search now accepts `j` and `k`, so extensions like `jira`/`json` are searchable; bare `j`/`k` no longer move the list selection (use arrow keys or the configured `tui.select.up`/`down`) ([#11350](https://github.com/can1357/oh-my-pi/issues/11350)).
