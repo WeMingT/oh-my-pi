@@ -1,3 +1,4 @@
+import { parseRateLimitReason } from "@oh-my-pi/pi-ai/error/rate-limit";
 import { isRecord, tryParseJson } from "@oh-my-pi/pi-utils";
 import type { AgentStorage } from "../../../session/agent-storage";
 import {
@@ -104,16 +105,9 @@ export function toSearchSources(
 const EXPLICIT_CREDIT_PATTERN = /(?<!\bno\s|\bnot\s|\bnever\s)credits?\s*(?:exhausted|exceeded)/i;
 // Quota wording paired with a terminal state ("quota exceeded", "quota has
 // been exceeded", "exceeded quota") and credit insufficiency ("insufficient
-// credits") are unambiguous exhaustion signals: they keep the billing
-// diagnosis on 401/403, where bare "quota"/"insufficient" usually describes
-// authorization problems. Forward gaps admit affirmative auxiliaries but
-// never negation, so "quota has not been exceeded" and "no quota exceeded"
-// stay out by construction. Reverse constructions ("exceeded quota") validate
-// a preceding window instead: negation ("not", "never", "no", contractions,
-// with intervening adverbs) keeps the match ambiguous. Concurrency wording
-// near a quota state in either order ("concurrent requests quota exceeded",
-// "quota exceeded due to concurrent requests") is a transient concurrency
-// cap, not depleted credit, and stays excluded.
+// credits") are unambiguous exhaustion signals on 401/403. Forward gaps
+// admit affirmative auxiliaries but never negation; reverse constructions
+// validate a preceding window for negation (including across adverbs).
 const QUOTA_STATE_AUX_WORD = "(?:has|have|had|is|are|was|were|be|been)";
 const QUOTA_STATE_GAP = `[^a-z0-9]+(?:${QUOTA_STATE_AUX_WORD}[^a-z0-9]+)?(?:${QUOTA_STATE_AUX_WORD}[^a-z0-9]+)?`;
 const QUOTA_STATE_FORWARD_PATTERN = new RegExp(
@@ -122,29 +116,23 @@ const QUOTA_STATE_FORWARD_PATTERN = new RegExp(
 );
 const QUOTA_STATE_REVERSE_PATTERN = new RegExp(`(?:exceeded|exhausted)${QUOTA_STATE_GAP}quota`, "gi");
 const QUOTA_STATE_NEGATION_PATTERN = /\b(?:not|never|no)\b|n't/i;
-const QUOTA_STATE_CONCURRENCY_PATTERN = /concurren[a-z]*/i;
 const QUOTA_STATE_WINDOW_CHARS = 48;
 
 function hasExplicitQuotaState(body: string): boolean {
-	const forward = QUOTA_STATE_FORWARD_PATTERN.exec(body);
-	if (forward?.index !== undefined) {
-		const window = body.slice(
-			Math.max(0, forward.index - QUOTA_STATE_WINDOW_CHARS),
-			forward.index + forward[0].length + QUOTA_STATE_WINDOW_CHARS,
-		);
-		if (!QUOTA_STATE_CONCURRENCY_PATTERN.test(window)) return true;
-	}
+	// Concurrency caps in either order are transient limits, not depleted
+	// credit. The central rate-limit classifier owns that distinction
+	// (CONCURRENT_LIMIT requires a real cap signal, not a bare word match).
+	// Only the positive billing gate stays local: the central classifier
+	// answers retriability broadly (it accepts negations and generic quota
+	// prose), while this 401/403 contract needs exactness.
+	const concurrentCap = parseRateLimitReason(body) === "CONCURRENT_LIMIT";
+	if (QUOTA_STATE_FORWARD_PATTERN.test(body) && !concurrentCap) return true;
 	QUOTA_STATE_REVERSE_PATTERN.lastIndex = 0;
 	let reverse: RegExpExecArray | null;
 	while ((reverse = QUOTA_STATE_REVERSE_PATTERN.exec(body)) !== null) {
 		const start = reverse.index;
 		if (QUOTA_STATE_NEGATION_PATTERN.test(body.slice(Math.max(0, start - QUOTA_STATE_WINDOW_CHARS), start))) continue;
-		const window = body.slice(
-			Math.max(0, start - QUOTA_STATE_WINDOW_CHARS),
-			start + reverse[0].length + QUOTA_STATE_WINDOW_CHARS,
-		);
-		if (QUOTA_STATE_CONCURRENCY_PATTERN.test(window)) continue;
-		return true;
+		if (!concurrentCap) return true;
 	}
 	return false;
 }

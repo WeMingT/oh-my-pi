@@ -107,7 +107,13 @@ describe("classifyProviderHttpError", () => {
 			}
 		}
 		// Near-misses without a terminal state or credit word stay auth failures.
-		for (const body of ["quota check failed", "load balancer request exceeded timeout"]) {
+		for (const body of [
+			"quota check failed",
+			"load balancer request exceeded timeout",
+			"billing webhook exceeded its retry deadline",
+			"retry attempts exhausted",
+			"usage limit configuration is invalid",
+		]) {
 			expect(classifyProviderHttpError("xai", 403, body)?.message).toContain("403 forbidden");
 		}
 	});
