@@ -99,8 +99,9 @@ export function toSearchSources(
 }
 
 // Explicit credit-exhaustion arm of the legacy heuristic: unambiguous wording
-// that keeps its billing diagnosis on every status.
-const EXPLICIT_CREDIT_PATTERN = /credits?\s*(?:exhausted|exceeded)/i;
+// that keeps its billing diagnosis on every status. A leading negation
+// ("No credits exhausted") keeps the match ambiguous.
+const EXPLICIT_CREDIT_PATTERN = /(?<!\bno\s|\bnot\s|\bnever\s)credits?\s*(?:exhausted|exceeded)/i;
 // Quota wording paired with a terminal state ("quota exceeded", "quota has
 // been exceeded", "exceeded quota") and credit insufficiency ("insufficient
 // credits") are unambiguous exhaustion signals: they keep the billing

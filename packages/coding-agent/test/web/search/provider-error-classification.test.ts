@@ -74,6 +74,10 @@ describe("classifyProviderHttpError", () => {
 				expect(error?.message).toContain("credits exhausted");
 			}
 		}
+		// A leading negation keeps the explicit arm ambiguous on auth statuses.
+		expect(classifyProviderHttpError("xai", 403, "No credits exhausted; access was denied")?.message).toContain(
+			"403 forbidden",
+		);
 	});
 
 	it("preserves structured insufficient_quota codes on auth statuses", () => {
