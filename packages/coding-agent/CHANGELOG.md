@@ -13,6 +13,8 @@
 ### Fixed
 
 - xAI web search keeps custom-endpoint fallback credentials paired with their transport and honors the selected model's reasoning-effort compatibility ([#11307](https://github.com/can1357/oh-my-pi/pull/11307) by [@WeMingT](https://github.com/WeMingT)).
+- xAI web search now recommends the matching `xai-oauth` API key when official OAuth credentials are refused for a custom relay ([#11307](https://github.com/can1357/oh-my-pi/pull/11307) by [@WeMingT](https://github.com/WeMingT)).
+
 ## [18.2.2] - 2026-09-16
 
 ### Added

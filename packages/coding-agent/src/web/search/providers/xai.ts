@@ -503,7 +503,7 @@ export async function searchXAI(params: SearchParams): Promise<SearchResponse> {
 	) {
 		throw new SearchProviderError(
 			"xai",
-			`Refusing to send official xAI OAuth credentials to custom endpoint ${transport.baseURL}. Configure an API key for provider "xai".`,
+			`Refusing to send official xAI OAuth credentials to custom endpoint ${transport.baseURL}. Configure an API key for provider "xai-oauth" to use this endpoint.`,
 		);
 	}
 	const keyOrResolver: ApiKey = customEndpoint
