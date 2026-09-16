@@ -1,8 +1,16 @@
 import * as os from "node:os";
 import * as path from "node:path";
 import { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
+import { getTimeBasedPricingPeriod } from "@oh-my-pi/pi-catalog/models";
 import { SPINNER_ADVANCE_MS, TERMINAL } from "@oh-my-pi/pi-tui";
-import { formatDuration, formatNumber, getProjectDir, pathIsWithin, relativePathWithinRoot } from "@oh-my-pi/pi-utils";
+import {
+	formatDuration,
+	formatNumber,
+	getProjectDir,
+	normalizePathForComparison,
+	relativePathWithinNormalizedRoot,
+	relativePathWithinRoot,
+} from "@oh-my-pi/pi-utils";
 import { type SymbolKey, type Theme, type ThemeColor, theme } from "../../../modes/theme/theme";
 import { shortenPath, TRUNCATE_LENGTHS, truncateToWidth } from "../../../tools/render-utils";
 import { fileHyperlink } from "../../../tui/hyperlink";
@@ -110,7 +118,7 @@ function formatAdvisorSpendPlaceholder(usingSubscription: boolean, uiTheme: Them
 	return `${spend} (adv)`;
 }
 
-const SCRATCH_ROOTS: readonly string[] = (() => {
+const NORMALIZED_SCRATCH_ROOTS: readonly string[] = (() => {
 	const roots = new Set<string>([os.tmpdir(), path.join(os.homedir(), "tmp")]);
 	if (process.platform === "win32") {
 		const { TEMP, TMP, SystemRoot } = process.env;
@@ -125,16 +133,31 @@ const SCRATCH_ROOTS: readonly string[] = (() => {
 			roots.add("/private/var/tmp");
 		}
 	}
-	return [...roots];
+	return [...new Set(Array.from(roots, normalizePathForComparison))];
 })();
 
-function classifyProjectDir(pwd: string): { scratch: boolean; relative: string | null } {
-	for (const root of SCRATCH_ROOTS) {
-		if (pathIsWithin(root, pwd)) {
-			return { scratch: true, relative: relativePathWithinRoot(root, pwd) };
+interface ProjectDirClassification {
+	scratch: boolean;
+	relative: string | null;
+}
+
+const PROJECT_DIR_CLASSIFICATIONS = new Map<string, ProjectDirClassification>();
+
+function classifyProjectDir(projectDir: string): ProjectDirClassification {
+	const cached = PROJECT_DIR_CLASSIFICATIONS.get(projectDir);
+	if (cached) return cached;
+
+	const normalizedProjectDir = normalizePathForComparison(projectDir);
+	let classification: ProjectDirClassification = { scratch: false, relative: null };
+	for (const normalizedRoot of NORMALIZED_SCRATCH_ROOTS) {
+		const relative = relativePathWithinNormalizedRoot(normalizedRoot, normalizedProjectDir);
+		if (relative !== null) {
+			classification = { scratch: true, relative: relative || null };
+			break;
 		}
 	}
-	return { scratch: false, relative: null };
+	PROJECT_DIR_CLASSIFICATIONS.set(projectDir, classification);
+	return classification;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -564,14 +587,17 @@ const costSegment: StatusLineSegment = {
 		const advisorCost = ctx.session.getAdvisorCost?.() ?? 0;
 		const normalizedPremiumRequests = normalizePremiumRequests(premiumRequests);
 		const state = ctx.session.state;
+		const pricingPeriod = state.model?.cost
+			? getTimeBasedPricingPeriod(state.model.cost, ctx.now?.getTime())
+			: undefined;
 		const usingSubscription = state.model ? (ctx.session.modelRegistry?.isUsingOAuth(state.model) ?? false) : false;
 
-		if (!cost && !advisorCost && !usingSubscription && !normalizedPremiumRequests) {
+		if (!cost && !advisorCost && !usingSubscription && !normalizedPremiumRequests && !pricingPeriod) {
 			return { content: "", visible: false };
 		}
 
 		const billingParts: string[] = [];
-		if (cost) {
+		if (cost || pricingPeriod) {
 			billingParts.push(
 				ctx.startupPlaceholder
 					? formatSpendPlaceholder(usingSubscription, theme)
@@ -582,6 +608,7 @@ const costSegment: StatusLineSegment = {
 				theme.getSymbolPreset() === "nerd" && theme.icon.subscription ? theme.icon.subscription : "(sub)",
 			);
 		}
+		if (pricingPeriod) billingParts.push(pricingPeriod === "peak" ? "↑" : "↓");
 		if (normalizedPremiumRequests) {
 			billingParts.push(`★ ${statusValue(ctx, formatNumber(normalizedPremiumRequests))}`);
 		}
